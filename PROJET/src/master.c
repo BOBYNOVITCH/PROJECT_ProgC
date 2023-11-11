@@ -237,6 +237,7 @@ void loop(Data *data)
     while (! end)
     {
         //TODO ouverture des tubes avec le client (cf. explications dans client.c)
+        
 
         int order = CM_ORDER_STOP;   //TODO pour que ça ne boucle pas, mais recevoir l'ordre du client
         switch(order)
@@ -300,15 +301,47 @@ int main(int argc, char * argv[])
     TRACE0("[master] début\n");
 
     Data data;
-
+    int ret;
+    key_t cle1;
+    key_t cle2; 
+    int semId1;
+    int semId2;
+    
     //TODO
     // - création des sémaphores
+    cle1 = ftok("client_master.h", 0)
+    myassert(cle1 != -1 , "erreur création de clé1");
+    
+    semId1 = semget(cle1, 1, IPC_CREAT|IPC_EXCL|0641);
+    myassert(semId1 != -1, "erreur semaphore1 n'a pas été créé");
+    
+    cle2 = ftok("client_master.h", 1);
+    myassert(cle2 != -1, "erreur création clé2");
+    
+    semId2 = semget(cle2, 1 , IPC_CREAT|IPC_EXCL|0641);
+    myassert(semId2 != -1, "erreur semaphore2 n'a pas été créé");
+    
     // - création des tubes nommés
+    ret = mkfifo("master_to_client", 0644); 
+    myassert(ret == 0, "erreur le tube master_to_client n'a pas été créé");
+    
+    ret = mkfifo("client_to_master", 0644);
+    myassert(ret == 0, "erreur le tube client_to_mster n'a pas été créé");
     //END TODO
 
     loop(&data);
 
     //TODO destruction des tubes nommés, des sémaphores, ...
+    //destruction des tubes
+    ret = unlink("master_to_client");
+    myassert(ret == 0, "le tube master_to_client n'a pas été détruit");
+    
+    ret = unlink("client_to_master");
+    myassert(ret == 0, "le tube client_to_master n'a pas été détruit");
+    
+    //destruction des sémaphores
+    ret = semctl(semId1, -1, IPC_RMID);
+    myassert(re    
 
     TRACE0("[master] terminaison\n");
     return EXIT_SUCCESS;
