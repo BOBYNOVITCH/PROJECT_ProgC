@@ -34,6 +34,10 @@
 // . structures de données
 // . création/libération/initialisation de ressources (sémaphores, tubes, ...)
 // . communications
+
+//noms des tubes només
+#define COM_TO_CLIENT "master_to_client"
+#define COM_FROM_CLIENT "master_from_client"
 //END TODO
 
 #endif

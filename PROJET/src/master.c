@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
 
 #include "utils.h"
 #include "myassert.h"
@@ -21,11 +24,20 @@
 typedef struct
 {
     // communication avec le client
+    //sémaphores
+    int sem_order;                    //permet de savoir si un client est déjà présent
+    int sem_new_client;               //permet au master de savoir si il peut ouvrir le tube en lecture
+
     // données internes
+    bool exist_worker;                //savoir si le premier worker existe
+
     // communication avec le premier worker (double tubes)
+    int c_to_w[2];                    //tube anonyme pour communiquer du master vers le premier worker
+    int c_from_w[2];                  //tube anonyme pour communiquer du premier worker vers le master
+
     // communication en provenance de tous les workers (un seul tube en lecture)
-    //TODO
-    int dummy;  //TODO à enlever (présent pour éviter le warning)
+    int com_from_allworker[2];        //tube anonyme pour communiquer de n'importe quel worker vers le master
+
 } Data;
 
 
@@ -46,9 +58,35 @@ static void usage(const char *exeName, const char *message)
  ************************************************************************/
 void init(Data *data)
 {
-    myassert(data != NULL, "il faut l'environnement d'exécution");
-
+    
     //TODO initialisation data
+    data = malloc(sizeof(Data));
+    
+    myassert(data != NULL, "il faut l'environnement d'exécution");
+    
+    int ret;
+    key_t cle1;
+    key_t cle2; 
+    
+    //création des sémaphores
+    cle1 = ftok("client_master.h", 0);
+    myassert(cle1 != -1 , "erreur création de clé1");
+    
+    data->sem_new_client= semget(cle1, 1, IPC_CREAT|IPC_EXCL|0641);
+    myassert(data->sem_new_client != -1, "erreur semaphore1 n'a pas été créé");
+    
+    cle2 = ftok("client_master.h", 1);
+    myassert(cle2 != -1, "erreur création clé2");
+    
+    data->sem_order = semget(cle2, 1 , IPC_CREAT|IPC_EXCL|0641);
+    myassert(data->sem_order != -1, "erreur semaphore2 n'a pas été créé");
+    
+    //création des tubes nommés
+    ret = mkfifo(COM_TO_CLIENT, 0644); 
+    myassert(ret == 0, "erreur le tube master_to_client n'a pas été créé");
+    
+    ret = mkfifo(data->com_from_client, 0644);
+    myassert(ret == 0, "erreur le tube client_to_mster n'a pas été créé");
 }
 
 
@@ -301,32 +339,12 @@ int main(int argc, char * argv[])
     TRACE0("[master] début\n");
 
     Data data;
-    int ret;
-    key_t cle1;
-    key_t cle2; 
-    int semId1;
-    int semId2;
+    
     
     //TODO
     // - création des sémaphores
-    cle1 = ftok("client_master.h", 0)
-    myassert(cle1 != -1 , "erreur création de clé1");
-    
-    semId1 = semget(cle1, 1, IPC_CREAT|IPC_EXCL|0641);
-    myassert(semId1 != -1, "erreur semaphore1 n'a pas été créé");
-    
-    cle2 = ftok("client_master.h", 1);
-    myassert(cle2 != -1, "erreur création clé2");
-    
-    semId2 = semget(cle2, 1 , IPC_CREAT|IPC_EXCL|0641);
-    myassert(semId2 != -1, "erreur semaphore2 n'a pas été créé");
-    
     // - création des tubes nommés
-    ret = mkfifo("master_to_client", 0644); 
-    myassert(ret == 0, "erreur le tube master_to_client n'a pas été créé");
-    
-    ret = mkfifo("client_to_master", 0644);
-    myassert(ret == 0, "erreur le tube client_to_mster n'a pas été créé");
+        
     //END TODO
 
     loop(&data);
@@ -341,7 +359,10 @@ int main(int argc, char * argv[])
     
     //destruction des sémaphores
     ret = semctl(semId1, -1, IPC_RMID);
-    myassert(re    
+    myassert(ret != -1, "la sémaphore semId1 n'a pas été détruite");
+    
+    ret = semctl(semId2, -1, IPC_RMID);
+    myassert(ret != -1, "la sémaphore semId2 n'a pas été détruite");
 
     TRACE0("[master] terminaison\n");
     return EXIT_SUCCESS;
