@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
+#include <fcntl.h>
 
 #include "utils.h"
 #include "myassert.h"
@@ -62,7 +63,13 @@ void init(Data *data)
     //TODO initialisation data
     data = malloc(sizeof(Data));
     
+    data->sem_order = NULL;
+    data->sem_new_client = NULL;
+    data->exist_worker = false;
+    
+
     myassert(data != NULL, "il faut l'environnement d'exécution");
+    
     
     int ret;
     key_t cle1;
@@ -73,20 +80,39 @@ void init(Data *data)
     myassert(cle1 != -1 , "erreur création de clé1");
     
     data->sem_new_client= semget(cle1, 1, IPC_CREAT|IPC_EXCL|0641);
-    myassert(data->sem_new_client != -1, "erreur semaphore1 n'a pas été créé");
+    myassert(data->sem_new_client != -1, "erreur sem_new_client n'a pas été créé");
     
     cle2 = ftok("client_master.h", 1);
     myassert(cle2 != -1, "erreur création clé2");
     
     data->sem_order = semget(cle2, 1 , IPC_CREAT|IPC_EXCL|0641);
-    myassert(data->sem_order != -1, "erreur semaphore2 n'a pas été créé");
+    myassert(data->sem_order != -1, "erreur sem_order n'a pas été créé");
+
+    //initilaistation des sémaphores
+    ret = semctl(data->sem_new_client, 0, SETVAL, 1);
+    myassert(ret != -1, "sem_new_client n'a pas été initialisé");
+
+    ret = semctl(data->sem_order, 0, SETVAL, 1);
+    myassert(ret != -1, "sem_order n'a pas été initialisé");
     
     //création des tubes nommés
     ret = mkfifo(COM_TO_CLIENT, 0644); 
     myassert(ret == 0, "erreur le tube master_to_client n'a pas été créé");
     
-    ret = mkfifo(data->com_from_client, 0644);
+    ret = mkfifo(COM_FROM_CLIENT, 0644);
     myassert(ret == 0, "erreur le tube client_to_mster n'a pas été créé");
+
+    //ouverture des tubes en ecriture pour l'un et en lecture pour l'autre
+    ret = open(COM_TO_CLIENT, O_WRONLY);                                            //ouverture en ecriture
+    myassert(ret != -1, "le tube COM_TO_CLIENT ne s'est pas ouvert correctement");
+    
+    ret = open(COM_FROM_CLIENT, O_RDONLY);                                            //ouverture en lecture
+    myassert(ret != -1, "le tube COM_FROM_CLIENT ne s'est pas ouvert correctement");
+
+    /*************************************************************************
+     * creer et gérer les tubes anonymes pour les workers
+    *************************************************************************/
+    
 }
 
 
@@ -104,6 +130,7 @@ void orderStop(Data *data)
     // - attendre sa fin
     // - envoyer l'accusé de réception au client (cf. client_master.h)
     //END TODO
+    
 }
 
 
@@ -269,12 +296,14 @@ void orderPrint(Data *data)
 void loop(Data *data)
 {
     bool end = false;
+    int ret;
 
     init(data);
 
     while (! end)
     {
         //TODO ouverture des tubes avec le client (cf. explications dans client.c)
+
         
 
         int order = CM_ORDER_STOP;   //TODO pour que ça ne boucle pas, mais recevoir l'ordre du client
@@ -339,6 +368,7 @@ int main(int argc, char * argv[])
     TRACE0("[master] début\n");
 
     Data data;
+    int ret;
     
     
     //TODO
@@ -358,10 +388,10 @@ int main(int argc, char * argv[])
     myassert(ret == 0, "le tube client_to_master n'a pas été détruit");
     
     //destruction des sémaphores
-    ret = semctl(semId1, -1, IPC_RMID);
-    myassert(ret != -1, "la sémaphore semId1 n'a pas été détruite");
+    ret = semctl(data.sem_new_client, -1, IPC_RMID);
+    myassert(ret != -1, "la sémaphore sem_new_client n'a pas été détruite");
     
-    ret = semctl(semId2, -1, IPC_RMID);
+    ret = semctl(data.sem_order, -1, IPC_RMID);
     myassert(ret != -1, "la sémaphore semId2 n'a pas été détruite");
 
     TRACE0("[master] terminaison\n");
