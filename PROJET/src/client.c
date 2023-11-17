@@ -41,6 +41,15 @@
 typedef struct {
     // communication avec le master
     //TODO
+    
+    //semaphores
+    int sem_order;                    //permet de savoir si un client est déjà présent
+    int sem_new_client;               //permet d'indiquer au master qu'il vient d'ouvrir le tube COM_FROM_CLIENT en ecriture
+    
+    //file descriptors des tubes
+    int fd_from_client;
+    int fd_to_client;
+    
     // infos pour le travail à faire (récupérées sur la ligne de commande)
     int order;     // ordre de l'utilisateur (cf. CM_ORDER_* dans client_master.h)
     float elt;     // pour CM_ORDER_EXIST, CM_ORDER_INSERT, CM_ORDER_LOCAL
@@ -267,6 +276,9 @@ void receiveAnswer(const Data *data)
 int main(int argc, char * argv[])
 {
     Data data;
+    int cle1, cle2;
+    int ret;
+    
     parseArgs(argc, argv, &data);
 
     if (data.order == CM_ORDER_LOCAL)
@@ -281,6 +293,31 @@ int main(int argc, char * argv[])
         //       . les ouvertures sont bloquantes, il faut s'assurer que
         //         le master ouvre les tubes dans le même ordre
         //END TODO
+        //création des sémaphores
+    	cle1 = ftok("client_master.h", 0);
+    	myassert(cle1 != -1 , "erreur création de clé1");
+    
+    	data.sem_new_client= semget(cle1, 1, 0);
+    	myassert(data.sem_new_client != -1, "client : erreur sem_new_client n'a pas été ouvert");
+    
+    	cle2 = ftok("client_master.h", 1);
+    	myassert(cle2 != -1, "erreur création clé2");
+    
+    	data.sem_order = semget(cle2, 1 , 0);
+    	myassert(data.sem_order != -1, "client : erreur sem_order n'a pas été ouvert");
+    	
+    	struct sembuf operation = {0, -1, 0};
+    	ret = semop(data.sem_order, &operation, 1);
+    	myassert(ret != -1, "erreur le client n'est pas entré en section critique");
+    	
+    	//ouverture des tubes
+    	ret = open(COM_FROM_CLIENT, O_WRONLY);                                //ouverture en ecriture
+    	myassert(ret != -1, "le tube COM_FROM_CLIENT ne s'est pas ouvert correctement");
+    
+    	ret = open(COM_TO_CLIENT, O_RDONLY);                                 //ouverture en lecture
+    	myassert(ret != -1, "le tube COM_TO_CLIENT ne s'est pas ouvert correctement");
+    	
+        
 
         sendData(&data);
         receiveAnswer(&data);
@@ -289,7 +326,19 @@ int main(int argc, char * argv[])
         // - sortir de la section critique
         // - libérer les ressources (fermeture des tubes, ...)
         // - débloquer le master grâce à un second sémaphore (cf. ci-dessous)
+        
+        struct sembuf operation = {0, +1, 0};
+    	ret = semop(data.sem_order, &operation, 1);
+    	myassert(ret != -1, "erreur le client n'est pas sorti de section critique");
+    	
         //
+        
+        ret = close(data.fd_from_client):
+        myassert(ret == 0; "le tube fd_from_client n'a pas été fermé");
+        
+        ret = close(data.fd_to_client):
+        myassert(ret == 0; "le tube fd_to_client n'a pas été fermé");
+        
         // Une fois que le master a envoyé la réponse au client, il se bloque
         // sur un sémaphore ; le dernier point permet donc au master de continuer
         //
