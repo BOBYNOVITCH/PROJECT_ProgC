@@ -25,6 +25,7 @@
 typedef struct
 {
     // communication avec le client
+    
     //sémaphores
     int sem_order;                    //permet de savoir si un client est déjà présent
     int sem_new_client;               //permet au master de savoir si il peut ouvrir le tube en lecture
@@ -297,16 +298,30 @@ void loop(Data *data)
 {
     bool end = false;
     int ret;
-
+    int fd_from_client;
+    int fd_to_client;
+    
     init(data);
 
     while (! end)
     {
         //TODO ouverture des tubes avec le client (cf. explications dans client.c)
-
+        
+        //ouverture du tube en attente de communication du client
+        fd_from_client = open(COM_FROM_CLIENT, O_RDONLY);
+        myassert(fd_from_client != -1, "l'ouverture du tube COM_FROM_CLIENT en lecture a échoué");
+        
+        //ouverture du tube en ecriture pour envoyer des information au client
+        fd_to_client = open(COM_TO_CLIENT, O_RDONLY);
+        myassert(fd_to_client != -1, "l'ouverture du tube COM_TO_CLIENT en écriture a échoué");
+        
         
 
         int order = CM_ORDER_STOP;   //TODO pour que ça ne boucle pas, mais recevoir l'ordre du client
+        ret = read(fd_from_client, order, sizeof(int));
+        myassert(ret != 0 , "erreur read dans fd_from_client, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+        
         switch(order)
         {
           case CM_ORDER_STOP:
@@ -346,7 +361,16 @@ void loop(Data *data)
         //TODO fermer les tubes nommés
         //     il est important d'ouvrir et fermer les tubes nommés à chaque itération
         //     voyez-vous pourquoi ?
+        ret = close(fd_from_client):
+        myassert(ret == 0; "le tube fd_from_client n'a pas été fermé");
+        
+        ret = close(fd_to_client):
+        myassert(ret == 0; "le tube fd_to_client n'a pas été fermé");
+        
         //TODO attendre ordre du client avant de continuer (sémaphore pour une précédence)
+        struct sembuf operation = {0; 0; 0};
+        ret = semop(sem_new_client, &operation, 1);
+        myassert(ret != -1, "erreur l'attente du passage du semaphore sem_new_client a échoué");
 
         TRACE0("[master] fin ordre\n");
     }
@@ -374,7 +398,9 @@ int main(int argc, char * argv[])
     //TODO
     // - création des sémaphores
     // - création des tubes nommés
-        
+    
+    //fait dans la fonction init
+    
     //END TODO
 
     loop(&data);
