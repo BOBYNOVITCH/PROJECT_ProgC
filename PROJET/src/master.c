@@ -61,11 +61,8 @@ static void usage(const char *exeName, const char *message)
 void init(Data *data)
 {
     
-    //TODO initialisation data
-    data = malloc(sizeof(Data));
+    //TODO initialisation data   
     
-    data->sem_order = NULL;
-    data->sem_new_client = NULL;
     data->exist_worker = false;
     
 
@@ -102,13 +99,14 @@ void init(Data *data)
     
     ret = mkfifo(COM_FROM_CLIENT, 0644);
     myassert(ret == 0, "erreur le tube client_to_mster n'a pas été créé");
-
+    
+    /*
     //ouverture des tubes en ecriture pour l'un et en lecture pour l'autre
     ret = open(COM_TO_CLIENT, O_WRONLY);                                            //ouverture en ecriture
     myassert(ret != -1, "le tube COM_TO_CLIENT ne s'est pas ouvert correctement");
     
     ret = open(COM_FROM_CLIENT, O_RDONLY);                                            //ouverture en lecture
-    myassert(ret != -1, "le tube COM_FROM_CLIENT ne s'est pas ouvert correctement");
+    myassert(ret != -1, "le tube COM_FROM_CLIENT ne s'est pas ouvert correctement");*/
 
     /*************************************************************************
      * creer et gérer les tubes anonymes pour les workers
@@ -131,6 +129,7 @@ void orderStop(Data *data)
     // - attendre sa fin
     // - envoyer l'accusé de réception au client (cf. client_master.h)
     //END TODO
+    printf("ordre stop demandé par le client");
     
 }
 
@@ -312,13 +311,13 @@ void loop(Data *data)
         myassert(fd_from_client != -1, "l'ouverture du tube COM_FROM_CLIENT en lecture a échoué");
         
         //ouverture du tube en ecriture pour envoyer des information au client
-        fd_to_client = open(COM_TO_CLIENT, O_RDONLY);
+        fd_to_client = open(COM_TO_CLIENT, O_WRONLY);
         myassert(fd_to_client != -1, "l'ouverture du tube COM_TO_CLIENT en écriture a échoué");
         
         
 
         int order = CM_ORDER_STOP;   //TODO pour que ça ne boucle pas, mais recevoir l'ordre du client
-        ret = read(fd_from_client, order, sizeof(int));
+        ret = read(fd_from_client, &order, sizeof(int));
         myassert(ret != 0 , "erreur read dans fd_from_client, personne en écriture");
         myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
         
@@ -361,16 +360,16 @@ void loop(Data *data)
         //TODO fermer les tubes nommés
         //     il est important d'ouvrir et fermer les tubes nommés à chaque itération
         //     voyez-vous pourquoi ?
-        ret = close(fd_from_client):
-        myassert(ret == 0; "le tube fd_from_client n'a pas été fermé");
+        ret = close(fd_from_client);
+        myassert(ret == 0, "le tube fd_from_client n'a pas été fermé");
         
-        ret = close(fd_to_client):
-        myassert(ret == 0; "le tube fd_to_client n'a pas été fermé");
+        ret = close(fd_to_client);
+        myassert(ret == 0, "le tube fd_to_client n'a pas été fermé");
         
         //TODO attendre ordre du client avant de continuer (sémaphore pour une précédence)
-        struct sembuf operation = {0; 0; 0};
-        ret = semop(sem_new_client, &operation, 1);
-        myassert(ret != -1, "erreur l'attente du passage du semaphore sem_new_client a échoué");
+        //struct sembuf operation = {0; 0; 0};
+        //ret = semop(sem_new_client, &operation, 1);
+        //myassert(ret != -1, "erreur l'attente du passage du semaphore sem_new_client a échoué");
 
         TRACE0("[master] fin ordre\n");
     }
@@ -407,18 +406,25 @@ int main(int argc, char * argv[])
 
     //TODO destruction des tubes nommés, des sémaphores, ...
     //destruction des tubes
-    ret = unlink("master_to_client");
-    myassert(ret == 0, "le tube master_to_client n'a pas été détruit");
+    ret = unlink(COM_TO_CLIENT);
+    myassert(ret == 0, "le tube COM_TO_CLIENT n'a pas été détruit");
     
-    ret = unlink("client_to_master");
-    myassert(ret == 0, "le tube client_to_master n'a pas été détruit");
+    ret = unlink(COM_FROM_CLIENT);
+    myassert(ret == 0, "le tube COM_FROM_CLIENT n'a pas été détruit");
     
     //destruction des sémaphores
+    //printf("valeur de sem_new_client : %d ",data.sem_new_client);
     ret = semctl(data.sem_new_client, -1, IPC_RMID);
+    //printf("valeur de ret : %d", ret);
     myassert(ret != -1, "la sémaphore sem_new_client n'a pas été détruite");
     
     ret = semctl(data.sem_order, -1, IPC_RMID);
-    myassert(ret != -1, "la sémaphore semId2 n'a pas été détruite");
+    myassert(ret != -1, "la sémaphore sem_order n'a pas été détruite");
+    
+    //char *semarg[2];
+    //semarg[0]="./rmsempipe.sh";
+    //semarg[1]=NULL;
+    //execv("./rmsempipe.sh", semarg);
 
     TRACE0("[master] terminaison\n");
     return EXIT_SUCCESS;

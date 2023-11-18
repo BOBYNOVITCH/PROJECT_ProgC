@@ -10,6 +10,11 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <fcntl.h>
 
 #include "utils.h"
 #include "myassert.h"
@@ -247,8 +252,13 @@ void lauchThreads(const Data *data)
 // envoi des données au master
 void sendData(const Data *data)
 {
-    myassert(data != NULL, "pb !");   //TODO à enlever (présent pour éviter le warning)
-
+    int ret;
+    //TODO à enlever (présent pour éviter le warning)
+    
+    
+    ret = write(data->fd_from_client, &(data->order), sizeof(int));
+    myassert(ret != 0 , "erreur write dans fd_from_client aucune donnee ecrite");
+    myassert(ret == sizeof(int), "erreur la valeur n'a pas été ecrite correctement");
     //TODO
     // - envoi de l'ordre au master (cf. CM_ORDER_* dans client_master.h)
     // - envoi des paramètres supplémentaires au master (pour CM_ORDER_EXIST,
@@ -306,38 +316,38 @@ int main(int argc, char * argv[])
     	data.sem_order = semget(cle2, 1 , 0);
     	myassert(data.sem_order != -1, "client : erreur sem_order n'a pas été ouvert");
     	
-    	struct sembuf operation = {0, -1, 0};
-    	ret = semop(data.sem_order, &operation, 1);
+    	struct sembuf prendre = {0, -1, 0};
+    	ret = semop(data.sem_order, &prendre, 1);
     	myassert(ret != -1, "erreur le client n'est pas entré en section critique");
     	
     	//ouverture des tubes
-    	ret = open(COM_FROM_CLIENT, O_WRONLY);                                //ouverture en ecriture
-    	myassert(ret != -1, "le tube COM_FROM_CLIENT ne s'est pas ouvert correctement");
+    	data.fd_from_client = open(COM_FROM_CLIENT, O_WRONLY);                                //ouverture en ecriture
+    	myassert(data.fd_from_client != -1, "le tube COM_FROM_CLIENT ne s'est pas ouvert correctement");
     
-    	ret = open(COM_TO_CLIENT, O_RDONLY);                                 //ouverture en lecture
-    	myassert(ret != -1, "le tube COM_TO_CLIENT ne s'est pas ouvert correctement");
+    	data.fd_to_client = open(COM_TO_CLIENT, O_RDONLY);                                 //ouverture en lecture
+    	myassert(data.fd_to_client != -1, "le tube COM_TO_CLIENT ne s'est pas ouvert correctement");
     	
         
 
         sendData(&data);
-        receiveAnswer(&data);
+        //receiveAnswer(&data);
 
         //TODO
         // - sortir de la section critique
         // - libérer les ressources (fermeture des tubes, ...)
         // - débloquer le master grâce à un second sémaphore (cf. ci-dessous)
         
-        struct sembuf operation = {0, +1, 0};
-    	ret = semop(data.sem_order, &operation, 1);
+        struct sembuf rendre = {0, +1, 0};
+    	ret = semop(data.sem_order, &rendre, 1);
     	myassert(ret != -1, "erreur le client n'est pas sorti de section critique");
     	
         //
         
-        ret = close(data.fd_from_client):
-        myassert(ret == 0; "le tube fd_from_client n'a pas été fermé");
+        ret = close(data.fd_from_client);
+        myassert(ret == 0, "le tube fd_from_client n'a pas été fermé");
         
-        ret = close(data.fd_to_client):
-        myassert(ret == 0; "le tube fd_to_client n'a pas été fermé");
+        ret = close(data.fd_to_client);
+        myassert(ret == 0, "le tube fd_to_client n'a pas été fermé");
         
         // Une fois que le master a envoyé la réponse au client, il se bloque
         // sur un sémaphore ; le dernier point permet donc au master de continuer
