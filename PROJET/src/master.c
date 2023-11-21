@@ -25,7 +25,9 @@
 typedef struct
 {
     // communication avec le client
-    
+    //tubes
+    int fd_from_client;
+    int fd_to_client;
     //sémaphores
     int sem_order;                    //permet de savoir si un client est déjà présent
     int sem_new_client;               //permet au master de savoir si il peut ouvrir le tube en lecture
@@ -252,6 +254,48 @@ void orderInsert(Data *data)
     // - recevoir accusé de réception venant du worker concerné (cf. master_worker.h)
     // - envoyer l'accusé de réception au client (cf. client_master.h)
     //END TODO
+    int elt;
+    int ret;
+    int reponse;
+    ret = read(data->fd_from_client, &elt, sizeof(int));
+    myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    
+    if(data->exist_worker == false)
+    {
+    	char * argv[6];
+    	char newelt[20];
+    	char new_c_to_w[20];
+    	char new_c_from_w[20];
+    	char new_c_allw[20];
+    	sprintf(newelt, "%d", elt);
+    	sprintf(new_c_to_w, "%d", data->c_to_w[0]);
+    	sprintf(new_c_from_w, "%d", data->c_from_w[1]);
+    	sprintf(new_c_allw, "%d", data->com_from_allworker[1]);
+    	argv[0] = "worker";
+    	argv[1] = newelt;
+    	argv[2] = new_c_to_w;
+    	argv[3] = new_c_from_w;
+    	argv[4] = new_c_allw;
+    	argv[5] = NULL;
+    	execv(argv[0], argv);
+    }
+    else
+    {
+    	int order = MW_ORDER_INSERT;
+    	ret = write(data->c_to_w[1], &order, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+    	ret = write(data->c_to_w[1], &elt, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+    }
+    
+    ret = read(data->c_from_w[0], &reponse, sizeof(int));
+    myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    
+    ret = write(data->fd_to_client, &reponse, sizeof(int));
+    myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
 }
 
 
@@ -297,8 +341,7 @@ void loop(Data *data)
 {
     bool end = false;
     int ret;
-    int fd_from_client;
-    int fd_to_client;
+    
     
     init(data);
 
@@ -307,17 +350,17 @@ void loop(Data *data)
         //TODO ouverture des tubes avec le client (cf. explications dans client.c)
         
         //ouverture du tube en attente de communication du client
-        fd_from_client = open(COM_FROM_CLIENT, O_RDONLY);
-        myassert(fd_from_client != -1, "l'ouverture du tube COM_FROM_CLIENT en lecture a échoué");
+        data->fd_from_client = open(COM_FROM_CLIENT, O_RDONLY);
+        myassert(data->fd_from_client != -1, "l'ouverture du tube COM_FROM_CLIENT en lecture a échoué");
         
         //ouverture du tube en ecriture pour envoyer des information au client
-        fd_to_client = open(COM_TO_CLIENT, O_WRONLY);
-        myassert(fd_to_client != -1, "l'ouverture du tube COM_TO_CLIENT en écriture a échoué");
+        data->fd_to_client = open(COM_TO_CLIENT, O_WRONLY);
+        myassert(data->fd_to_client != -1, "l'ouverture du tube COM_TO_CLIENT en écriture a échoué");
         
         
 
         int order = CM_ORDER_STOP;   //TODO pour que ça ne boucle pas, mais recevoir l'ordre du client
-        ret = read(fd_from_client, &order, sizeof(int));
+        ret = read(data->fd_from_client, &order, sizeof(int));
         myassert(ret != 0 , "erreur read dans fd_from_client, personne en écriture");
         myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
         
@@ -360,10 +403,10 @@ void loop(Data *data)
         //TODO fermer les tubes nommés
         //     il est important d'ouvrir et fermer les tubes nommés à chaque itération
         //     voyez-vous pourquoi ?
-        ret = close(fd_from_client);
+        ret = close(data->fd_from_client);
         myassert(ret == 0, "le tube fd_from_client n'a pas été fermé");
         
-        ret = close(fd_to_client);
+        ret = close(data->fd_to_client);
         myassert(ret == 0, "le tube fd_to_client n'a pas été fermé");
         
         //TODO attendre ordre du client avant de continuer (sémaphore pour une précédence)

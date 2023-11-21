@@ -21,11 +21,18 @@
 typedef struct
 {
     // données internes (valeur de l'élément, cardinalité)
+    float val;
+    int nb;
     // communication avec le père (2 tubes) et avec le master (1 tube en écriture)
+    int pere_to_fils;
+    int fils_to_pere;
+    int tube_to_master;
     // communication avec le fils gauche s'il existe (2 tubes)
+    int fils_gauche[2];
     // communication avec le fils droit s'il existe (2 tubes)
+    int fils_droit[2];
     //TODO
-    int dummy;  //TODO à enlever (présent pour éviter le warning)
+    //int dummy;  //TODO à enlever (présent pour éviter le warning)
 } Data;
 
 
@@ -53,12 +60,13 @@ static void parseArgs(int argc, char * argv[], Data *data)
 
     //TODO initialisation data
     
+    
     //TODO (à enlever) comment récupérer les arguments de la ligne de commande
-    float elt = strtof(argv[1], NULL);
-    int fdIn = strtol(argv[2], NULL, 10);
-    int fdOut = strtol(argv[3], NULL, 10);
-    int fdToMaster = strtol(argv[4], NULL, 10);
-    printf("%g %d %d %d\n", elt, fdIn, fdOut, fdToMaster);
+    data->val = strtof(argv[1], NULL);
+    data->pere_to_fils = strtol(argv[2], NULL, 10);
+    data->fils_to_pere = strtol(argv[3], NULL, 10);
+    data->tube_to_master = strtol(argv[4], NULL, 10);
+    printf("%g %d %d %d\n", data->val, data->pere_to_fils, data->fils_to_pere, data->tube_to_master);
     //END TODO
 }
 
@@ -68,11 +76,14 @@ static void parseArgs(int argc, char * argv[], Data *data)
  ************************************************************************/
 void stopAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre stop\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre stop\n", getpid(), getppid(), data->val /*TODO élément*/);
     myassert(data != NULL, "il faut l'environnement d'exécution");
 
     //TODO
     // - traiter les cas où les fils n'existent pas
+    if(data->fils_gauche == NULL && data->fils_droit == NULL){
+    	printf("demande d'arret");
+    }
     // - envoyer au worker gauche ordre de fin (cf. master_worker.h)
     // - envoyer au worker droit ordre de fin (cf. master_worker.h)
     // - attendre la fin des deux fils
@@ -210,6 +221,25 @@ static void insertAction(Data *data)
     //       . envoyer au worker droit élément à insérer
     //       . note : c'est un des descendants qui enverra l'accusé de réception au master
     //END TODO
+
+    int elt;
+    int ret;
+    int reponse;
+    ret = read(data->pere_to_fils, &elt, sizeof(int));
+    myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    if(elt == data->val)
+    {
+      data->nb = data->nb + 1;
+      reponse = MW_ANSWER_INSERT;
+      ret = write(data->fils_to_pere, &reponse, sizeof(int)); 
+      myassert(ret != -1, "l'ecriture dans fils_to_pere à échoué");
+    }
+    reponse = MW_ANSWER_INSERT;
+    ret = write(data->fils_to_pere, &reponse, sizeof(int));
+    myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
 }
 
 
@@ -240,10 +270,15 @@ static void printAction(Data *data)
 void loop(Data *data)
 {
     bool end = false;
+    int ret;
 
     while (! end)
     {
-        int order = MW_ORDER_STOP;   //TODO pour que ça ne boucle pas, mais recevoir l'ordre du père
+        int order = MW_ORDER_STOP;   
+        //TODO pour que ça ne boucle pas, mais recevoir l'ordre du père
+        ret = read(data->pere_to_fils, &order, sizeof(int));
+    	myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
+    	myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
         switch(order)
         {
           case MW_ORDER_STOP:
@@ -289,16 +324,23 @@ void loop(Data *data)
 int main(int argc, char * argv[])
 {
     Data data;
+    
     parseArgs(argc, argv, &data);
-    TRACE3("    [worker (%d, %d) {%g}] : début worker\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : début worker\n", getpid(), getppid(), data.val /*TODO élément*/);
+    printf("%g %d %d %d\n", data.val, data.pere_to_fils, data.fils_to_pere, data.tube_to_master);
 
     //TODO envoyer au master l'accusé de réception d'insertion (cf. master_worker.h)
+    int reponse = MW_ANSWER_INSERT;
+    fprintf(stdout, "worker : envoi de la reponse");
+    int ret = write(data.fils_to_pere, &reponse, sizeof(int));
+    myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
     //TODO note : en effet si je suis créé c'est qu'on vient d'insérer un élément : moi
 
     loop(&data);
 
     //TODO fermer les tubes
 
-    TRACE3("    [worker (%d, %d) {%g}] : fin worker\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : fin worker\n", getpid(), getppid(), data.val /*TODO élément*/);
     return EXIT_SUCCESS;
 }

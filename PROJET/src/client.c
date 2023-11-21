@@ -259,6 +259,11 @@ void sendData(const Data *data)
     ret = write(data->fd_from_client, &(data->order), sizeof(int));
     myassert(ret != 0 , "erreur write dans fd_from_client aucune donnee ecrite");
     myassert(ret == sizeof(int), "erreur la valeur n'a pas été ecrite correctement");
+    if(data->order == CM_ORDER_INSERT){
+    	ret = write(data->fd_from_client, &(data->elt), sizeof(float));
+    	myassert(ret != 0 , "erreur write dans fd_from_client aucune donnee ecrite");
+    	myassert(ret == sizeof(int), "erreur la valeur n'a pas été ecrite correctement");
+    }
     //TODO
     // - envoi de l'ordre au master (cf. CM_ORDER_* dans client_master.h)
     // - envoi des paramètres supplémentaires au master (pour CM_ORDER_EXIST,
@@ -277,6 +282,11 @@ void receiveAnswer(const Data *data)
     //      . récupération de données supplémentaires du master si nécessaire
     // - affichage du résultat
     //END TODO
+    int reponse;
+    int ret = read(data->fd_to_client, &reponse, sizeof(int));
+    myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    printf("reponse du master : %d ", reponse);
 }
 
 
@@ -330,7 +340,7 @@ int main(int argc, char * argv[])
         
 
         sendData(&data);
-        //receiveAnswer(&data);
+        receiveAnswer(&data);
 
         //TODO
         // - sortir de la section critique
