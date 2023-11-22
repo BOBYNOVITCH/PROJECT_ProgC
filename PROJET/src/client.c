@@ -64,6 +64,23 @@ typedef struct {
     int nbThreads; // pour CM_ORDER_LOCAL
 } Data;
 
+//fonction init pour initialiser les semaphores
+void init(Data *data)
+{
+    int cle1, cle2;
+
+    cle1 = ftok("client_master.h", 0);
+    myassert(cle1 != -1 , "erreur création de clé1");
+
+    data->sem_new_client= semget(cle1, 1, 0);
+    myassert(data->sem_new_client != -1, "client : erreur sem_new_client n'a pas été ouvert");
+
+    cle2 = ftok("client_master.h", 1);
+    myassert(cle2 != -1, "erreur création clé2");
+
+    data->sem_order = semget(cle2, 1 , 0);
+    myassert(data->sem_order != -1, "client : erreur sem_order n'a pas été ouvert");
+}
 
 /************************************************************************
  * Usage
@@ -247,23 +264,7 @@ void lauchThreads(const Data *data)
     //TODO libération des ressources    
 }
 
-//fonction init pour initialiser les semaphores
-void init(Data *data)
-{
-    int cle1, cle2;
 
-    cle1 = ftok("client_master.h", 0);
-    myassert(cle1 != -1 , "erreur création de clé1");
-
-    data->sem_new_client= semget(cle1, 1, 0);
-    myassert(data->sem_new_client != -1, "client : erreur sem_new_client n'a pas été ouvert");
-
-    cle2 = ftok("client_master.h", 1);
-    myassert(cle2 != -1, "erreur création clé2");
-
-    data->sem_order = semget(cle2, 1 , 0);
-    myassert(data->sem_order != -1, "client : erreur sem_order n'a pas été ouvert");
-}
 
 /************************************************************************
  * Partie communication avec le master
@@ -281,8 +282,10 @@ void sendData(const Data *data)
     if(data->order == CM_ORDER_INSERT){
     	ret = write(data->c_to_m, &(data->elt), sizeof(float));
     	myassert(ret != 0 , "erreur write dans c_to_m aucune donnee ecrite");
-    	myassert(ret == sizeof(int), "erreur la valeur n'a pas été ecrite correctement");
+    	myassert(ret == sizeof(float), "erreur la valeur n'a pas été ecrite correctement");
     }
+
+    
     //TODO
     // - envoi de l'ordre au master (cf. CM_ORDER_* dans client_master.h)
     // - envoi des paramètres supplémentaires au master (pour CM_ORDER_EXIST,
@@ -317,6 +320,11 @@ int main(int argc, char * argv[])
     Data data;
     
     int ret;
+    init(&data);
+
+    struct sembuf prendre = {0, -1, 0};
+    ret = semop(data.sem_order, &prendre, 1);
+    myassert(ret != -1, "erreur le client n'est pas entré en section critique");  
     
     parseArgs(argc, argv, &data);
 
@@ -334,11 +342,9 @@ int main(int argc, char * argv[])
         //END TODO
         //création des sémaphores
     	
-        init(&data);
+        
     	
-    	struct sembuf prendre = {0, -1, 0};
-    	ret = semop(data.sem_order, &prendre, 1);
-    	myassert(ret != -1, "erreur le client n'est pas entré en section critique");        
+    	      
     	
     	//ouverture des tubes
     	data.c_to_m = open(COM_FROM_CLIENT, O_WRONLY);                                //ouverture en ecriture
@@ -358,12 +364,9 @@ int main(int argc, char * argv[])
         // - débloquer le master grâce à un second sémaphore (cf. ci-dessous)
         
         struct sembuf rendre = {0, +1, 0};
-    	ret = semop(data.sem_order, &rendre, 1);
+        ret = semop(data.sem_order, &rendre, 1);
     	myassert(ret != -1, "erreur le client n'est pas sorti de section critique");
-
-        ret = semop(data.sem_new_client, &rendre, 1);
-    	myassert(ret != -1, "erreur le client n'est pas sorti de section critique");
-    	
+          	
         //
         
         ret = close(data.c_to_m);
@@ -377,6 +380,9 @@ int main(int argc, char * argv[])
         //
         // N'hésitez pas à faire des fonctions annexes ; si la fonction main
         // ne dépassait pas une trentaine de lignes, ce serait bien.
+        ret = semop(data.sem_new_client, &rendre, 1);
+    	myassert(ret != -1, "erreur le client n'est pas sorti de section critique");
+        
     }
     
     return EXIT_SUCCESS;

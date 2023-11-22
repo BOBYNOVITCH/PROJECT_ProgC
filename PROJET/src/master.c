@@ -384,12 +384,10 @@ void loop(Data *data)
         //ouverture du tube en ecriture pour envoyer des information au client
         data->m_to_c = open(COM_TO_CLIENT, O_WRONLY);
         myassert(data->m_to_c != -1, "l'ouverture du tube COM_TO_CLIENT en écriture a échoué");
-        
-        struct sembuf operation = {0, 0, 0};
-        ret = semop(data->sem_order, &operation, 1);
-        myassert(ret != -1, "erreur l'attente du passage du semaphore sem_new_client a échoué");
 
         int order = CM_ORDER_STOP;   //TODO pour que ça ne boucle pas, mais recevoir l'ordre du client
+
+
         ret = read(data->c_to_m, &order, sizeof(int));
         myassert(ret != 0 , "erreur read dans c_to_m, personne en écriture");
         myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
@@ -440,8 +438,7 @@ void loop(Data *data)
         myassert(ret == 0, "le tube m_to_c n'a pas été fermé");
         
         //TODO attendre ordre du client avant de continuer (sémaphore pour une précédence)
-        sleep(3);
-        
+        struct sembuf operation = {0, -1, 0};
         ret = semop(data->sem_new_client, &operation, 1);
         myassert(ret != -1, "erreur l'attente du passage du semaphore sem_new_client a échoué");
 

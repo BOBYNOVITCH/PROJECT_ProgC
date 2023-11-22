@@ -337,14 +337,14 @@ int main(int argc, char * argv[])
     //TODO envoyer au master l'accusé de réception d'insertion (cf. master_worker.h)
     printf("worker : envoi de la reponse\n");
     printf("valeur data.fils_to_pere : %d\n", data.fils_to_pere);
-    rep = 23;
+    rep = MW_ANSWER_INSERT;
     ret = write(data.fils_to_pere, &rep, sizeof(int));
     myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
     myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
      
     //TODO note : en effet si je suis créé c'est qu'on vient d'insérer un élément : moi
 
-    //loop(&data);
+    loop(&data);
 
     //TODO fermer les tubes
     close(data.pere_to_fils);
