@@ -26,8 +26,8 @@ typedef struct
 {
     // communication avec le client
     //tubes
-    int fd_from_client;
-    int fd_to_client;
+    int c_to_m;
+    int m_to_c;
     //sémaphores
     int sem_order;                    //permet de savoir si un client est déjà présent
     int sem_new_client;               //permet au master de savoir si il peut ouvrir le tube en lecture
@@ -89,7 +89,7 @@ void init(Data *data)
     myassert(data->sem_order != -1, "erreur sem_order n'a pas été créé");
 
     //initilaistation des sémaphores
-    ret = semctl(data->sem_new_client, 0, SETVAL, 1);
+    ret = semctl(data->sem_new_client, 0, SETVAL, 0);
     myassert(ret != -1, "sem_new_client n'a pas été initialisé");
 
     ret = semctl(data->sem_order, 0, SETVAL, 1);
@@ -101,6 +101,18 @@ void init(Data *data)
     
     ret = mkfifo(COM_FROM_CLIENT, 0644);
     myassert(ret == 0, "erreur le tube client_to_mster n'a pas été créé");
+    
+    //tubes vers le fils
+    ret = pipe(data->c_to_w);
+    myassert(ret == 0, "erreur le tube anonyme c_to_w est vide");
+
+    ret = pipe(data->c_from_w);
+    myassert(ret == 0, "erreur le tube anonyme c_to_w est vide");
+    printf("valeur data->c_from_w[1] : %d\n", data->c_from_w[1]);
+    printf("valeur data->c_from_w[0] : %d\n", data->c_from_w[0]);
+
+    ret = pipe(data->com_from_allworker);
+    myassert(ret == 0, "erreur le tube anonyme c_to_w est vide");
     
     /*
     //ouverture des tubes en ecriture pour l'un et en lecture pour l'autre
@@ -254,31 +266,50 @@ void orderInsert(Data *data)
     // - recevoir accusé de réception venant du worker concerné (cf. master_worker.h)
     // - envoyer l'accusé de réception au client (cf. client_master.h)
     //END TODO
-    int elt;
+    float elt;
     int ret;
     int reponse;
-    ret = read(data->fd_from_client, &elt, sizeof(int));
+    ret = read(data->c_to_m, &elt, sizeof(int));
     myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
     myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
     
+    int retfork;
     if(data->exist_worker == false)
     {
-    	char * argv[6];
-    	char newelt[20];
-    	char new_c_to_w[20];
-    	char new_c_from_w[20];
-    	char new_c_allw[20];
-    	sprintf(newelt, "%d", elt);
-    	sprintf(new_c_to_w, "%d", data->c_to_w[0]);
-    	sprintf(new_c_from_w, "%d", data->c_from_w[1]);
-    	sprintf(new_c_allw, "%d", data->com_from_allworker[1]);
-    	argv[0] = "worker";
-    	argv[1] = newelt;
-    	argv[2] = new_c_to_w;
-    	argv[3] = new_c_from_w;
-    	argv[4] = new_c_allw;
-    	argv[5] = NULL;
-    	execv(argv[0], argv);
+      retfork = fork();
+      myassert(retfork != -1, "erreur le fork ne s'est pas fait");
+
+      if(retfork == 0){
+    	  char * argv[6];
+    	  char newelt[20];
+    	  char new_c_to_w[20];
+    	  char new_c_from_w[20];
+    	  char new_c_allw[20];
+
+    	  sprintf(newelt, "%g", elt);
+    	  sprintf(new_c_to_w, "%d", data->c_to_w[0]);
+    	  sprintf(new_c_from_w, "%d", data->c_from_w[1]);
+    	  sprintf(new_c_allw, "%d", data->com_from_allworker[1]);
+
+    	  argv[0] = "worker";
+    	  argv[1] = newelt;
+    	  argv[2] = new_c_to_w;
+    	  argv[3] = new_c_from_w;
+    	  argv[4] = new_c_allw;
+    	  argv[5] = NULL;
+        close(data->c_from_w[0]);
+        close(data->c_to_w[1]);
+        close(data->com_from_allworker[0]);
+        
+    	  execv(argv[0], argv);
+        
+      } else if(retfork != 0) {
+        data->exist_worker = true;
+        ret = read(data->c_from_w[0], &reponse, sizeof(int));
+        myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+        printf("valeur de réponse : %d\n", reponse);
+      }
     }
     else
     {
@@ -289,11 +320,8 @@ void orderInsert(Data *data)
     	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
     }
     
-    ret = read(data->c_from_w[0], &reponse, sizeof(int));
-    myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
-    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
     
-    ret = write(data->fd_to_client, &reponse, sizeof(int));
+    ret = write(data->m_to_c, &reponse, sizeof(int));
     myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
     myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
 }
@@ -350,18 +378,20 @@ void loop(Data *data)
         //TODO ouverture des tubes avec le client (cf. explications dans client.c)
         
         //ouverture du tube en attente de communication du client
-        data->fd_from_client = open(COM_FROM_CLIENT, O_RDONLY);
-        myassert(data->fd_from_client != -1, "l'ouverture du tube COM_FROM_CLIENT en lecture a échoué");
+        data->c_to_m = open(COM_FROM_CLIENT, O_RDONLY);
+        myassert(data->c_to_m != -1, "l'ouverture du tube COM_FROM_CLIENT en lecture a échoué");
         
         //ouverture du tube en ecriture pour envoyer des information au client
-        data->fd_to_client = open(COM_TO_CLIENT, O_WRONLY);
-        myassert(data->fd_to_client != -1, "l'ouverture du tube COM_TO_CLIENT en écriture a échoué");
+        data->m_to_c = open(COM_TO_CLIENT, O_WRONLY);
+        myassert(data->m_to_c != -1, "l'ouverture du tube COM_TO_CLIENT en écriture a échoué");
         
-        
+        struct sembuf operation = {0, 0, 0};
+        ret = semop(data->sem_order, &operation, 1);
+        myassert(ret != -1, "erreur l'attente du passage du semaphore sem_new_client a échoué");
 
         int order = CM_ORDER_STOP;   //TODO pour que ça ne boucle pas, mais recevoir l'ordre du client
-        ret = read(data->fd_from_client, &order, sizeof(int));
-        myassert(ret != 0 , "erreur read dans fd_from_client, personne en écriture");
+        ret = read(data->c_to_m, &order, sizeof(int));
+        myassert(ret != 0 , "erreur read dans c_to_m, personne en écriture");
         myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
         
         switch(order)
@@ -403,16 +433,17 @@ void loop(Data *data)
         //TODO fermer les tubes nommés
         //     il est important d'ouvrir et fermer les tubes nommés à chaque itération
         //     voyez-vous pourquoi ?
-        ret = close(data->fd_from_client);
-        myassert(ret == 0, "le tube fd_from_client n'a pas été fermé");
+        ret = close(data->c_to_m);
+        myassert(ret == 0, "le tube c_to_m n'a pas été fermé");
         
-        ret = close(data->fd_to_client);
-        myassert(ret == 0, "le tube fd_to_client n'a pas été fermé");
+        ret = close(data->m_to_c);
+        myassert(ret == 0, "le tube m_to_c n'a pas été fermé");
         
         //TODO attendre ordre du client avant de continuer (sémaphore pour une précédence)
-        //struct sembuf operation = {0; 0; 0};
-        //ret = semop(sem_new_client, &operation, 1);
-        //myassert(ret != -1, "erreur l'attente du passage du semaphore sem_new_client a échoué");
+        sleep(3);
+        
+        ret = semop(data->sem_new_client, &operation, 1);
+        myassert(ret != -1, "erreur l'attente du passage du semaphore sem_new_client a échoué");
 
         TRACE0("[master] fin ordre\n");
     }
@@ -455,19 +486,12 @@ int main(int argc, char * argv[])
     ret = unlink(COM_FROM_CLIENT);
     myassert(ret == 0, "le tube COM_FROM_CLIENT n'a pas été détruit");
     
-    //destruction des sémaphores
-    //printf("valeur de sem_new_client : %d ",data.sem_new_client);
+    //destruction des sémaphores  
     ret = semctl(data.sem_new_client, -1, IPC_RMID);
-    //printf("valeur de ret : %d", ret);
     myassert(ret != -1, "la sémaphore sem_new_client n'a pas été détruite");
     
     ret = semctl(data.sem_order, -1, IPC_RMID);
     myassert(ret != -1, "la sémaphore sem_order n'a pas été détruite");
-    
-    //char *semarg[2];
-    //semarg[0]="./rmsempipe.sh";
-    //semarg[1]=NULL;
-    //execv("./rmsempipe.sh", semarg);
 
     TRACE0("[master] terminaison\n");
     return EXIT_SUCCESS;

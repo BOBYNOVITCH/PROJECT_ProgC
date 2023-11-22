@@ -52,8 +52,8 @@ typedef struct {
     int sem_new_client;               //permet d'indiquer au master qu'il vient d'ouvrir le tube COM_FROM_CLIENT en ecriture
     
     //file descriptors des tubes
-    int fd_from_client;
-    int fd_to_client;
+    int c_to_m;
+    int m_to_c;
     
     // infos pour le travail à faire (récupérées sur la ligne de commande)
     int order;     // ordre de l'utilisateur (cf. CM_ORDER_* dans client_master.h)
@@ -192,6 +192,8 @@ static void parseArgs(int argc, char * argv[], Data *data)
 }
 
 
+
+
 /************************************************************************
  * Partie multi-thread
  ************************************************************************/
@@ -245,6 +247,23 @@ void lauchThreads(const Data *data)
     //TODO libération des ressources    
 }
 
+//fonction init pour initialiser les semaphores
+void init(Data *data)
+{
+    int cle1, cle2;
+
+    cle1 = ftok("client_master.h", 0);
+    myassert(cle1 != -1 , "erreur création de clé1");
+
+    data->sem_new_client= semget(cle1, 1, 0);
+    myassert(data->sem_new_client != -1, "client : erreur sem_new_client n'a pas été ouvert");
+
+    cle2 = ftok("client_master.h", 1);
+    myassert(cle2 != -1, "erreur création clé2");
+
+    data->sem_order = semget(cle2, 1 , 0);
+    myassert(data->sem_order != -1, "client : erreur sem_order n'a pas été ouvert");
+}
 
 /************************************************************************
  * Partie communication avec le master
@@ -256,12 +275,12 @@ void sendData(const Data *data)
     //TODO à enlever (présent pour éviter le warning)
     
     
-    ret = write(data->fd_from_client, &(data->order), sizeof(int));
-    myassert(ret != 0 , "erreur write dans fd_from_client aucune donnee ecrite");
+    ret = write(data->c_to_m, &(data->order), sizeof(int));
+    myassert(ret != 0 , "erreur write dans c_to_m aucune donnee ecrite");
     myassert(ret == sizeof(int), "erreur la valeur n'a pas été ecrite correctement");
     if(data->order == CM_ORDER_INSERT){
-    	ret = write(data->fd_from_client, &(data->elt), sizeof(float));
-    	myassert(ret != 0 , "erreur write dans fd_from_client aucune donnee ecrite");
+    	ret = write(data->c_to_m, &(data->elt), sizeof(float));
+    	myassert(ret != 0 , "erreur write dans c_to_m aucune donnee ecrite");
     	myassert(ret == sizeof(int), "erreur la valeur n'a pas été ecrite correctement");
     }
     //TODO
@@ -283,10 +302,10 @@ void receiveAnswer(const Data *data)
     // - affichage du résultat
     //END TODO
     int reponse;
-    int ret = read(data->fd_to_client, &reponse, sizeof(int));
+    int ret = read(data->m_to_c, &reponse, sizeof(int));
     myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
     myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
-    printf("reponse du master : %d ", reponse);
+    printf("reponse du master : %d \n", reponse);
 }
 
 
@@ -296,7 +315,7 @@ void receiveAnswer(const Data *data)
 int main(int argc, char * argv[])
 {
     Data data;
-    int cle1, cle2;
+    
     int ret;
     
     parseArgs(argc, argv, &data);
@@ -314,28 +333,19 @@ int main(int argc, char * argv[])
         //         le master ouvre les tubes dans le même ordre
         //END TODO
         //création des sémaphores
-    	cle1 = ftok("client_master.h", 0);
-    	myassert(cle1 != -1 , "erreur création de clé1");
-    
-    	data.sem_new_client= semget(cle1, 1, 0);
-    	myassert(data.sem_new_client != -1, "client : erreur sem_new_client n'a pas été ouvert");
-    
-    	cle2 = ftok("client_master.h", 1);
-    	myassert(cle2 != -1, "erreur création clé2");
-    
-    	data.sem_order = semget(cle2, 1 , 0);
-    	myassert(data.sem_order != -1, "client : erreur sem_order n'a pas été ouvert");
+    	
+        init(&data);
     	
     	struct sembuf prendre = {0, -1, 0};
     	ret = semop(data.sem_order, &prendre, 1);
-    	myassert(ret != -1, "erreur le client n'est pas entré en section critique");
+    	myassert(ret != -1, "erreur le client n'est pas entré en section critique");        
     	
     	//ouverture des tubes
-    	data.fd_from_client = open(COM_FROM_CLIENT, O_WRONLY);                                //ouverture en ecriture
-    	myassert(data.fd_from_client != -1, "le tube COM_FROM_CLIENT ne s'est pas ouvert correctement");
+    	data.c_to_m = open(COM_FROM_CLIENT, O_WRONLY);                                //ouverture en ecriture
+    	myassert(data.c_to_m != -1, "le tube COM_FROM_CLIENT ne s'est pas ouvert correctement");
     
-    	data.fd_to_client = open(COM_TO_CLIENT, O_RDONLY);                                 //ouverture en lecture
-    	myassert(data.fd_to_client != -1, "le tube COM_TO_CLIENT ne s'est pas ouvert correctement");
+    	data.m_to_c = open(COM_TO_CLIENT, O_RDONLY);                                 //ouverture en lecture
+    	myassert(data.m_to_c != -1, "le tube COM_TO_CLIENT ne s'est pas ouvert correctement");
     	
         
 
@@ -350,14 +360,17 @@ int main(int argc, char * argv[])
         struct sembuf rendre = {0, +1, 0};
     	ret = semop(data.sem_order, &rendre, 1);
     	myassert(ret != -1, "erreur le client n'est pas sorti de section critique");
+
+        ret = semop(data.sem_new_client, &rendre, 1);
+    	myassert(ret != -1, "erreur le client n'est pas sorti de section critique");
     	
         //
         
-        ret = close(data.fd_from_client);
-        myassert(ret == 0, "le tube fd_from_client n'a pas été fermé");
+        ret = close(data.c_to_m);
+        myassert(ret == 0, "le tube c_to_m n'a pas été fermé");
         
-        ret = close(data.fd_to_client);
-        myassert(ret == 0, "le tube fd_to_client n'a pas été fermé");
+        ret = close(data.m_to_c);
+        myassert(ret == 0, "le tube m_to_c n'a pas été fermé");
         
         // Une fois que le master a envoyé la réponse au client, il se bloque
         // sur un sémaphore ; le dernier point permet donc au master de continuer

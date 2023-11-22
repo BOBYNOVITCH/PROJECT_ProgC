@@ -23,6 +23,7 @@ typedef struct
     // données internes (valeur de l'élément, cardinalité)
     float val;
     int nb;
+    int nbworker;
     // communication avec le père (2 tubes) et avec le master (1 tube en écriture)
     int pere_to_fils;
     int fils_to_pere;
@@ -59,7 +60,6 @@ static void parseArgs(int argc, char * argv[], Data *data)
         usage(argv[0], "Nombre d'arguments incorrect");
 
     //TODO initialisation data
-    
     
     //TODO (à enlever) comment récupérer les arguments de la ligne de commande
     data->val = strtof(argv[1], NULL);
@@ -229,13 +229,13 @@ static void insertAction(Data *data)
     myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
     myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
 
-    if(elt == data->val)
-    {
-      data->nb = data->nb + 1;
-      reponse = MW_ANSWER_INSERT;
-      ret = write(data->fils_to_pere, &reponse, sizeof(int)); 
-      myassert(ret != -1, "l'ecriture dans fils_to_pere à échoué");
-    }
+    //if(elt == data->val)
+    //{
+    //  data->nb = data->nb + 1;
+    //  reponse = MW_ANSWER_INSERT;
+    //  ret = write(data->fils_to_pere, &reponse, sizeof(int)); 
+    //  myassert(ret != -1, "l'ecriture dans fils_to_pere à échoué");
+    //}
     reponse = MW_ANSWER_INSERT;
     ret = write(data->fils_to_pere, &reponse, sizeof(int));
     myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
@@ -324,22 +324,32 @@ void loop(Data *data)
 int main(int argc, char * argv[])
 {
     Data data;
+    int ret;
+    int rep;
+    
+    printf("%s\n", argv[2]);
+    
     
     parseArgs(argc, argv, &data);
     TRACE3("    [worker (%d, %d) {%g}] : début worker\n", getpid(), getppid(), data.val /*TODO élément*/);
-    printf("%g %d %d %d\n", data.val, data.pere_to_fils, data.fils_to_pere, data.tube_to_master);
+    
 
     //TODO envoyer au master l'accusé de réception d'insertion (cf. master_worker.h)
-    int reponse = MW_ANSWER_INSERT;
-    fprintf(stdout, "worker : envoi de la reponse");
-    int ret = write(data.fils_to_pere, &reponse, sizeof(int));
+    printf("worker : envoi de la reponse\n");
+    printf("valeur data.fils_to_pere : %d\n", data.fils_to_pere);
+    rep = 23;
+    ret = write(data.fils_to_pere, &rep, sizeof(int));
     myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
     myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+     
     //TODO note : en effet si je suis créé c'est qu'on vient d'insérer un élément : moi
 
-    loop(&data);
+    //loop(&data);
 
     //TODO fermer les tubes
+    close(data.pere_to_fils);
+    close(data.fils_to_pere);
+    close(data.tube_to_master);
 
     TRACE3("    [worker (%d, %d) {%g}] : fin worker\n", getpid(), getppid(), data.val /*TODO élément*/);
     return EXIT_SUCCESS;
