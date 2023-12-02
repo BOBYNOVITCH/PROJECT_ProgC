@@ -24,8 +24,8 @@ else
 fi
 
 
-c2m="master_to_client"
-m2c="master_from_client"
+c2m="pipe_cl2ma"
+m2c="pipe_ma2cl"
 
 if [ ! -p $c2m ]
 then
