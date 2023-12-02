@@ -8,6 +8,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <fcntl.h>
 
 #include "utils.h"
 #include "myassert.h"
@@ -23,15 +27,18 @@ typedef struct
     // données internes (valeur de l'élément, cardinalité)
     float val;
     int nb;
-    int nbworker;
     // communication avec le père (2 tubes) et avec le master (1 tube en écriture)
     int pere_to_fils;
     int fils_to_pere;
     int tube_to_master;
+    bool fils_gauche;
+    bool fils_droit;
     // communication avec le fils gauche s'il existe (2 tubes)
-    int fils_gauche[2];
+    int to_fils_gauche[2];
+    int from_fils_gauche[2];
     // communication avec le fils droit s'il existe (2 tubes)
-    int fils_droit[2];
+    int to_fils_droit[2];
+    int from_fils_droit[2];
     //TODO
     //int dummy;  //TODO à enlever (présent pour éviter le warning)
 } Data;
@@ -55,18 +62,21 @@ static void usage(const char *exeName, const char *message)
 static void parseArgs(int argc, char * argv[], Data *data)
 {
     myassert(data != NULL, "il faut l'environnement d'exécution");
+    
 
     if (argc != 5)
         usage(argv[0], "Nombre d'arguments incorrect");
 
     //TODO initialisation data
-    
+    data->nb=1;
+    data->fils_gauche = false;
+    data->fils_droit = false;
     //TODO (à enlever) comment récupérer les arguments de la ligne de commande
     data->val = strtof(argv[1], NULL);
     data->pere_to_fils = strtol(argv[2], NULL, 10);
     data->fils_to_pere = strtol(argv[3], NULL, 10);
     data->tube_to_master = strtol(argv[4], NULL, 10);
-    printf("%g %d %d %d\n", data->val, data->pere_to_fils, data->fils_to_pere, data->tube_to_master);
+
     //END TODO
 }
 
@@ -78,11 +88,37 @@ void stopAction(Data *data)
 {
     TRACE3("    [worker (%d, %d) {%g}] : ordre stop\n", getpid(), getppid(), data->val /*TODO élément*/);
     myassert(data != NULL, "il faut l'environnement d'exécution");
+    int ret;
 
     //TODO
     // - traiter les cas où les fils n'existent pas
-    if(data->fils_gauche == NULL && data->fils_droit == NULL){
-    	printf("demande d'arret");
+    int order = MW_ORDER_STOP;
+    if(data->fils_gauche == true && data->fils_droit == true)
+    {
+      ret = write(data->to_fils_gauche[1], &order, sizeof(int));
+      myassert(ret == sizeof(int), "erreur la valeur ecrite n'est pas de la taille d'un int");
+      
+
+      ret = write(data->to_fils_droit[1], &order, sizeof(int));
+      myassert(ret == sizeof(int), "erreur la valeur ecrite n'est pas de la taille d'un int");
+
+      wait(NULL); //attendre fin du fils gauche
+      wait(NULL); //attendre fin du fils droit
+
+    } else if(data->fils_gauche == true && data->fils_droit == false)
+    {
+    	ret = write(data->to_fils_gauche[1], &order, sizeof(int));
+      myassert(ret == sizeof(int), "erreur la valeur ecrite n'est pas de la taille d'un int");
+
+      wait(NULL); //attendre fin du fils gauche
+
+    } else if(data->fils_gauche == false && data->fils_droit == true)
+    {
+      ret = write(data->to_fils_droit[1], &order, sizeof(int));
+      myassert(ret == sizeof(int), "erreur la valeur ecrite n'est pas de la taille d'un int");
+
+      wait(NULL); //attendre fin du fils droit
+
     }
     // - envoyer au worker gauche ordre de fin (cf. master_worker.h)
     // - envoyer au worker droit ordre de fin (cf. master_worker.h)
@@ -135,7 +171,7 @@ static void minimumAction(Data *data)
  ************************************************************************/
 static void maximumAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre maximum\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre maximum\n", getpid(), getppid(), data->val /*TODO élément*/);
     myassert(data != NULL, "il faut l'environnement d'exécution");
 
     //TODO
@@ -198,7 +234,7 @@ static void sumAction(Data *data)
  ************************************************************************/
 static void insertAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre insert\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre insert\n", getpid(), getppid(), data->val /*TODO élément*/);
     myassert(data != NULL, "il faut l'environnement d'exécution");
 
     //TODO
@@ -222,24 +258,146 @@ static void insertAction(Data *data)
     //       . note : c'est un des descendants qui enverra l'accusé de réception au master
     //END TODO
 
-    int elt;
+    float elt;
     int ret;
     int reponse;
-    ret = read(data->pere_to_fils, &elt, sizeof(int));
+    int retfork;
+    ret = read(data->pere_to_fils, &elt, sizeof(float));
     myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
-    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un int");
 
-    //if(elt == data->val)
-    //{
-    //  data->nb = data->nb + 1;
-    //  reponse = MW_ANSWER_INSERT;
-    //  ret = write(data->fils_to_pere, &reponse, sizeof(int)); 
-    //  myassert(ret != -1, "l'ecriture dans fils_to_pere à échoué");
-    //}
-    reponse = MW_ANSWER_INSERT;
-    ret = write(data->fils_to_pere, &reponse, sizeof(int));
-    myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
-    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    if(elt == data->val) //élément courant == élément à tester
+    {
+      data->nb = data->nb + 1; //on incrémente
+      
+      TRACE3("    [worker (%d, %d) {%g}] : nombre d'élément augmente \n", getpid(), getppid(), data->val);
+
+      //on envoie la réponse
+      reponse = MW_ANSWER_INSERT;
+      ret = write(data->tube_to_master, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    } else if(elt < data->val && data->fils_gauche == false) //si (elt à tester < elt courant) et (pas de fils gauche)
+    {
+      
+      ret = pipe(data->to_fils_gauche);
+      myassert(ret == 0, "erreur le tube anonyme to_fils_gauche est vide");
+
+      ret = pipe(data->from_fils_gauche);
+      myassert(ret == 0, "erreur le tube anonyme from_fils_gauche est vide");
+      
+      data->fils_gauche=true;
+
+      retfork = fork();
+      myassert(retfork != -1, "erreur le fork ne s'est pas fait");
+      
+
+      if(retfork == 0)
+      {
+        char * argv[6];
+    	  char newelt[20];
+    	  char new_p_to_f[20];
+    	  char new_f_to_p[20];
+    	  char new_c_allw[20];
+
+    	  sprintf(newelt, "%g", elt);
+    	  sprintf(new_p_to_f, "%d", data->to_fils_gauche[0]);
+    	  sprintf(new_f_to_p, "%d", data->from_fils_gauche[1]);
+    	  sprintf(new_c_allw, "%d", data->tube_to_master);
+
+    	  argv[0] = "worker";
+    	  argv[1] = newelt;
+    	  argv[2] = new_p_to_f;
+    	  argv[3] = new_f_to_p;
+    	  argv[4] = new_c_allw;
+    	  argv[5] = NULL;
+
+        ret = close(data->to_fils_gauche[1]);
+        myassert(ret == 0, "erreur le tube to_fils_gauche[1] n'est pas fermé");
+
+        ret = close(data->from_fils_gauche[0]);
+        myassert(ret == 0, "erreur le tube from_fils_gauche[0] n'est pas fermé");        
+        
+    	  execv(argv[0], argv);
+      }
+      if(retfork != 0){
+        ret = close(data->to_fils_gauche[0]);
+        myassert(ret == 0, "erreur le tube to_fils_gauche[1] n'est pas fermé");
+
+        ret = close(data->from_fils_gauche[1]);
+        myassert(ret == 0, "erreur le tube from_fils_gauche[0] n'est pas fermé");
+      }
+    } else if(elt > data->val && data->fils_droit == false) //si (elt à tester > elt courant) et (pas de fils droit)
+    {
+      ret = pipe(data->to_fils_droit);
+      myassert(ret == 0, "erreur le tube anonyme to_fils_droit est vide");
+
+      ret = pipe(data->from_fils_droit);
+      myassert(ret == 0, "erreur le tube anonyme from_fils_droit est vide");
+
+      data->fils_droit=true;
+
+      retfork = fork();
+      myassert(retfork != -1, "erreur le fork ne s'est pas fait");
+      
+      if(retfork == 0)
+      {
+        char * argv[6];
+    	  char newelt[20];
+    	  char new_p_to_f[20];
+    	  char new_f_to_p[20];
+    	  char new_c_allw[20];
+
+    	  sprintf(newelt, "%g", elt);
+    	  sprintf(new_p_to_f, "%d", data->to_fils_droit[0]);
+    	  sprintf(new_f_to_p, "%d", data->from_fils_droit[1]);
+    	  sprintf(new_c_allw, "%d", data->tube_to_master);
+
+    	  argv[0] = "worker";
+    	  argv[1] = newelt;
+    	  argv[2] = new_p_to_f;
+    	  argv[3] = new_f_to_p;
+    	  argv[4] = new_c_allw;
+    	  argv[5] = NULL;
+
+        ret = close(data->to_fils_droit[1]);
+        myassert(ret == 0, "erreur le tube to_fils_droit[1] n'est pas fermé");
+
+        ret = close(data->from_fils_droit[0]);
+        myassert(ret == 0, "erreur le tube from_fils_droit[0] n'est pas fermé");
+        
+    	  execv(argv[0], argv);
+      }
+
+      if(retfork != 0){
+        ret = close(data->to_fils_droit[0]);
+        myassert(ret == 0, "erreur le tube to_fils_droit[1] n'est pas fermé");
+
+        ret = close(data->from_fils_droit[1]);
+        myassert(ret == 0, "erreur le tube from_fils_droit[0] n'est pas fermé");
+      }
+
+    }
+    if(elt < data->val) //si (elt à insérer < elt courant)
+    {
+      int order = MW_ORDER_INSERT;
+      ret = write(data->to_fils_gauche[1], &order, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+    	ret = write(data->to_fils_gauche[1], &elt, sizeof(float));
+    	myassert(ret == sizeof(float), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+    } else  //sinon (donc elt à insérer > elt courant)
+    {
+       int order = MW_ORDER_INSERT;
+      ret = write(data->to_fils_droit[1], &order, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+    	ret = write(data->to_fils_droit[1], &elt, sizeof(float));
+    	myassert(ret == sizeof(float), "erreur la valeur envoyée n'est pas de la taille d'un int");
+    }
+    
 }
 
 
@@ -277,8 +435,8 @@ void loop(Data *data)
         int order = MW_ORDER_STOP;   
         //TODO pour que ça ne boucle pas, mais recevoir l'ordre du père
         ret = read(data->pere_to_fils, &order, sizeof(int));
-    	myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
-    	myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    	  myassert(ret != 0 , "erreur read dans pere_to_fils, personne en écriture");
+    	  myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
         switch(order)
         {
           case MW_ORDER_STOP:
@@ -312,7 +470,8 @@ void loop(Data *data)
             break;
         }
 
-        TRACE3("    [worker (%d, %d) {%g}] : fin ordre\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+        TRACE3("    [worker (%d, %d) {%g}] : fin ordre\n", getpid(), getppid(), data->val /*TODO élément*/);
+        
     }
 }
 
@@ -327,7 +486,7 @@ int main(int argc, char * argv[])
     int ret;
     int rep;
     
-    printf("%s\n", argv[2]);
+    //printf("%s\n", argv[2]);
     
     
     parseArgs(argc, argv, &data);
@@ -335,10 +494,9 @@ int main(int argc, char * argv[])
     
 
     //TODO envoyer au master l'accusé de réception d'insertion (cf. master_worker.h)
-    printf("worker : envoi de la reponse\n");
-    printf("valeur data.fils_to_pere : %d\n", data.fils_to_pere);
+    TRACE3("    [worker (%d, %d) {%g}] : envoi de la reponse\n", getpid(), getppid(), data.val /*TODO élément*/);
     rep = MW_ANSWER_INSERT;
-    ret = write(data.fils_to_pere, &rep, sizeof(int));
+    ret = write(data.tube_to_master, &rep, sizeof(int));
     myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
     myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
      

@@ -108,8 +108,7 @@ void init(Data *data)
 
     ret = pipe(data->c_from_w);
     myassert(ret == 0, "erreur le tube anonyme c_to_w est vide");
-    printf("valeur data->c_from_w[1] : %d\n", data->c_from_w[1]);
-    printf("valeur data->c_from_w[0] : %d\n", data->c_from_w[0]);
+    
 
     ret = pipe(data->com_from_allworker);
     myassert(ret == 0, "erreur le tube anonyme c_to_w est vide");
@@ -136,13 +135,34 @@ void orderStop(Data *data)
 {
     TRACE0("[master] ordre stop\n");
     myassert(data != NULL, "il faut l'environnement d'exécution");
-
+    int ret;
     //TODO
     // - traiter le cas ensemble vide (pas de premier worker)
     // - envoyer au premier worker ordre de fin (cf. master_worker.h)
     // - attendre sa fin
     // - envoyer l'accusé de réception au client (cf. client_master.h)
     //END TODO
+    if(data->exist_worker == false)
+    {
+      int reponse = CM_ANSWER_STOP_OK;
+      ret = write(data->m_to_c, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    } else 
+    {
+      int order = MW_ORDER_STOP;
+    	ret = write(data->c_to_w[1], &order, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+      wait(NULL);
+
+      int reponse = CM_ANSWER_STOP_OK;
+      ret = write(data->m_to_c, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    }
     printf("ordre stop demandé par le client");
     
 }
@@ -269,9 +289,9 @@ void orderInsert(Data *data)
     float elt;
     int ret;
     int reponse;
-    ret = read(data->c_to_m, &elt, sizeof(int));
+    ret = read(data->c_to_m, &elt, sizeof(float));
     myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
-    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un int");
     
     int retfork;
     if(data->exist_worker == false)
@@ -305,10 +325,12 @@ void orderInsert(Data *data)
         
       } else if(retfork != 0) {
         data->exist_worker = true;
-        ret = read(data->c_from_w[0], &reponse, sizeof(int));
+        close(data->c_from_w[1]);
+        close(data->c_to_w[0]);
+
+        ret = read(data->com_from_allworker[0], &reponse, sizeof(int));
         myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
         myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
-        printf("valeur de réponse : %d\n", reponse);
       }
     }
     else
@@ -316,8 +338,12 @@ void orderInsert(Data *data)
     	int order = MW_ORDER_INSERT;
     	ret = write(data->c_to_w[1], &order, sizeof(int));
     	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
-    	ret = write(data->c_to_w[1], &elt, sizeof(int));
-    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+    	ret = write(data->c_to_w[1], &elt, sizeof(float));
+    	myassert(ret == sizeof(float), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+      ret = read(data->com_from_allworker[0], &reponse, sizeof(int));
+        myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
     }
     
     
@@ -443,6 +469,7 @@ void loop(Data *data)
         myassert(ret != -1, "erreur l'attente du passage du semaphore sem_new_client a échoué");
 
         TRACE0("[master] fin ordre\n");
+        printf("\n\n");
     }
 }
 
