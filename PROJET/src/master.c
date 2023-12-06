@@ -385,6 +385,24 @@ void orderPrint(Data *data)
     //   note : ce sont les workers qui font les affichages
     // - envoyer l'accusé de réception au client (cf. client_master.h)
     //END TODO
+    int ret;
+
+    if(data->exist_worker == true)
+    {
+      int order = MW_ORDER_PRINT;
+    	ret = write(data->c_to_w[1], &order, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+      int reponse;
+      ret = read(data->c_from_w[0], &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    }
+    
+    int reponse_pere = CM_ANSWER_PRINT_OK;
+    ret = write(data->m_to_c, &reponse_pere, sizeof(int));
+    myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
 }
 
 
