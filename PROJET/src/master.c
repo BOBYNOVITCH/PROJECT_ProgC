@@ -184,6 +184,54 @@ void orderHowMany(Data *data)
     // - envoyer l'accusé de réception au client (cf. client_master.h)
     // - envoyer les résultats au client
     //END TODO
+    int ret;
+    if(data->exist_worker == false){
+      int reponse = CM_ANSWER_HOW_MANY_OK;
+      ret = write(data->m_to_c, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      int number = 0;
+      ret = write(data->m_to_c, &number, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->m_to_c, &number, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    } else {
+      int order = MW_ORDER_HOW_MANY;
+    	ret = write(data->c_to_w[1], &order, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+      int reponse_w;
+      ret = read(data->c_from_w[0], &reponse_w, sizeof(int));
+      myassert(ret != 0 , "erreur read dans com_from_allworker, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      float number;
+      float sec_number;
+      ret = read(data->c_from_w[0], &number, sizeof(int));
+      myassert(ret != 0 , "erreur read dans com_from_allworker, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un float");
+
+      ret = read(data->c_from_w[0], &sec_number, sizeof(int));
+      myassert(ret != 0 , "erreur read dans com_from_allworker, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un float");
+
+      int reponse_client = CM_ANSWER_HOW_MANY_OK;
+      ret = write(data->m_to_c, &reponse_client, sizeof(int));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->m_to_c, &number, sizeof(int));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un float");
+
+      ret = write(data->m_to_c, &sec_number, sizeof(int));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un float");
+    }
 }
 
 
@@ -205,6 +253,40 @@ void orderMinimum(Data *data)
     //       . envoyer l'accusé de réception au client (cf. client_master.h)
     //       . envoyer le résultat au client
     //END TODO
+    int ret;
+
+    if(data->exist_worker == false){
+      int reponse_client = CM_ANSWER_MINIMUM_EMPTY;
+      ret = write(data->m_to_c, &reponse_client, sizeof(int));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    } else {
+      int order = MW_ORDER_MINIMUM;
+      ret = write(data->c_to_w[1], &order, sizeof(int));
+      myassert(ret != 0 , "erreur write dans c_to_w, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      int reponse_w;
+      ret = read(data->com_from_allworker[0], &reponse_w, sizeof(int));
+      myassert(ret != 0 , "erreur read dans com_from_allworker, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      float elt;
+      ret = read(data->com_from_allworker[0], &elt, sizeof(float));
+      myassert(ret != 0 , "erreur read dans com_from_allworker, personne en écriture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+
+      int reponse_client = CM_ANSWER_MINIMUM_OK;
+      ret = write(data->m_to_c, &reponse_client, sizeof(int));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->m_to_c, &elt, sizeof(float));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+    
+    }
 }
 
 
@@ -219,6 +301,39 @@ void orderMaximum(Data *data)
     //TODO
     // cf. explications pour le minimum
     //END TODO
+    int ret;
+
+    if(data->exist_worker == false){
+      int reponse_client = CM_ANSWER_MAXIMUM_EMPTY;
+      ret = write(data->m_to_c, &reponse_client, sizeof(int));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    } else {
+      int order = MW_ORDER_MAXIMUM;
+      ret = write(data->c_to_w[1], &order, sizeof(int));
+      myassert(ret != 0 , "erreur write dans c_to_w, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      int reponse_w;
+      ret = read(data->com_from_allworker[0], &reponse_w, sizeof(int));
+      myassert(ret != 0 , "erreur read dans com_from_allworker, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      float elt;
+      ret = read(data->com_from_allworker[0], &elt, sizeof(float));
+      myassert(ret != 0 , "erreur read dans com_from_allworker, personne en écriture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+
+      int reponse_client = CM_ANSWER_MAXIMUM_OK;
+      ret = write(data->m_to_c, &reponse_client, sizeof(int));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->m_to_c, &elt, sizeof(float));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+    }
 }
 
 
@@ -245,6 +360,56 @@ void orderExist(Data *data)
     //             . envoyer l'accusé de réception au client (cf. client_master.h)
     //             . envoyer le résultat au client
     //END TODO
+    float test_elt;
+    int ret;
+
+    ret = read(data->c_to_m, &test_elt, sizeof(float));
+    myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
+    myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    if(data->exist_worker == false){
+      int reponse_client = CM_ANSWER_EXIST_NO;
+      ret = write(data->m_to_c, &reponse_client, sizeof(int));
+      myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    } else {
+      int order = MW_ORDER_EXIST;
+      ret = write(data->c_to_w[1], &order, sizeof(int));
+      myassert(ret != 0 , "erreur write dans c_to_w, personne en lecture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->c_to_w[1], &test_elt, sizeof(float));
+      myassert(ret != 0 , "erreur write dans c_to_w, personne en lecture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+
+      int reponse_w;
+      ret = read(data->com_from_allworker[0], &reponse_w, sizeof(int));
+      myassert(ret != 0 , "erreur read dans com_from_allworker, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      if(reponse_w == MW_ANSWER_EXIST_NO){
+        int reponse_client = CM_ANSWER_EXIST_NO;
+        ret = write(data->m_to_c, &reponse_client, sizeof(int));
+        myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+      } else {
+
+        int number;
+        ret = read(data->com_from_allworker[0], &number, sizeof(int));
+        myassert(ret != 0 , "erreur read dans com_from_allworker, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+        int reponse_client = CM_ANSWER_EXIST_YES;
+        ret = write(data->m_to_c, &reponse_client, sizeof(int));
+        myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+        ret = write(data->m_to_c, &number, sizeof(int));
+        myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+      }
+    }
 }
 
 /************************************************************************
@@ -263,6 +428,34 @@ void orderSum(Data *data)
     // - envoyer l'accusé de réception au client (cf. client_master.h)
     // - envoyer le résultat au client
     //END TODO
+    float sum;
+    int ret;
+    int reponse;
+    if(data ->exist_worker == false){
+        sum = 0;
+    } else {
+      int order = MW_ORDER_SUM;
+    	ret = write(data->c_to_w[1], &order, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+      ret = read(data->c_from_w[0], &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = read(data->c_from_w[0], &sum, sizeof(float));
+      myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+    }
+
+    int reponse_client = CM_ANSWER_SUM_OK;
+    ret = write(data->m_to_c, &reponse_client, sizeof(int));
+    myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    
+    ret = write(data->m_to_c, &sum, sizeof(float));
+    myassert(ret != 0 , "erreur write dans m_to_c, personne en lecture");
+    myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
 }
 
 /************************************************************************
@@ -291,7 +484,7 @@ void orderInsert(Data *data)
     int reponse;
     ret = read(data->c_to_m, &elt, sizeof(float));
     myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
-    myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un int");
+    myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
     
     int retfork;
     if(data->exist_worker == false)
@@ -342,8 +535,8 @@ void orderInsert(Data *data)
     	myassert(ret == sizeof(float), "erreur la valeur envoyée n'est pas de la taille d'un int");
 
       ret = read(data->com_from_allworker[0], &reponse, sizeof(int));
-        myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
-        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+      myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
     }
     
     
@@ -367,6 +560,77 @@ void orderInsertMany(Data *data)
     //       . l'insérer selon l'algo vu dans orderInsert (penser à factoriser le code)
     // - envoyer l'accusé de réception au client (cf. client_master.h)
     //END TODO
+    int ret;
+    int taille;
+    ret = read(data->c_to_m, &taille, sizeof(int));
+    myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    float tab[taille];
+
+    ret = read(data->c_to_m, &tab, sizeof(float) * taille);
+    myassert(ret != 0 , "erreur read dans COM_FROM_CLIENT, personne en écriture");
+    myassert(ret == (int)sizeof(float) * taille, "erreur la valeur lue n'est pas de la taille d'un float");
+
+    for(int i = 0; i<taille; i++){
+      int retfork;
+      int reponse;
+      if(data->exist_worker == false)
+      {
+        retfork = fork();
+        myassert(retfork != -1, "erreur le fork ne s'est pas fait");
+
+        if(retfork == 0){
+      	  char * argv[6];
+      	  char newelt[20];
+      	  char new_c_to_w[20];
+      	  char new_c_from_w[20];
+      	  char new_c_allw[20];
+
+      	  sprintf(newelt, "%g", tab[i]);
+      	  sprintf(new_c_to_w, "%d", data->c_to_w[0]);
+      	  sprintf(new_c_from_w, "%d", data->c_from_w[1]);
+      	  sprintf(new_c_allw, "%d", data->com_from_allworker[1]);
+
+      	  argv[0] = "worker";
+      	  argv[1] = newelt;
+      	  argv[2] = new_c_to_w;
+      	  argv[3] = new_c_from_w;
+      	  argv[4] = new_c_allw;
+      	  argv[5] = NULL;
+          close(data->c_from_w[0]);
+          close(data->c_to_w[1]);
+          close(data->com_from_allworker[0]);
+
+      	  execv(argv[0], argv);
+
+        } else if(retfork != 0) {
+          data->exist_worker = true;
+          close(data->c_from_w[1]);
+          close(data->c_to_w[0]);
+
+          ret = read(data->com_from_allworker[0], &reponse, sizeof(int));
+          myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+          myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+        }
+      }
+      else
+      {
+      	int order = MW_ORDER_INSERT;
+      	ret = write(data->c_to_w[1], &order, sizeof(int));
+      	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+      	ret = write(data->c_to_w[1], &tab[i], sizeof(float));
+      	myassert(ret == sizeof(float), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+        ret = read(data->com_from_allworker[0], &reponse, sizeof(int));
+        myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+      }
+    }
+    int reponse_client = CM_ANSWER_INSERT_MANY_OK;
+    ret = write(data->m_to_c, &reponse_client, sizeof(int));
+    myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
 }
 
 

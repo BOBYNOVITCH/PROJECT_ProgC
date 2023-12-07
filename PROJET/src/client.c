@@ -215,7 +215,12 @@ static void parseArgs(int argc, char * argv[], Data *data)
  * Partie multi-thread
  ************************************************************************/
 //TODO Une structure pour les arguments à passer à un thread (aucune variable globale autorisée)
-
+typedef struct
+{
+    int *result;
+    int nbtosearch;
+    pthread_mutex_t *mutex;
+} ThreadData;
 //TODO
 // Code commun à tous les threads
 // Un thread s'occupe d'une portion du tableau et compte en interne le nombre de fois
@@ -230,6 +235,9 @@ void lauchThreads(const Data *data)
     //TODO déclarations nécessaires : mutex, ...
     int result = 0;
     float * tab = ut_generateTab(data->nb, data->min, data->max, 0);
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_t tabId[data->nbThreads];
+    ThreadData datas[data->nbThreads];
 
     //TODO lancement des threads
 
@@ -279,10 +287,34 @@ void sendData(const Data *data)
     ret = write(data->c_to_m, &(data->order), sizeof(int));
     myassert(ret != 0 , "erreur write dans c_to_m aucune donnee ecrite");
     myassert(ret == sizeof(int), "erreur la valeur n'a pas été ecrite correctement");
+
     if(data->order == CM_ORDER_INSERT){
     	ret = write(data->c_to_m, &(data->elt), sizeof(float));
     	myassert(ret != 0 , "erreur write dans c_to_m aucune donnee ecrite");
     	myassert(ret == sizeof(float), "erreur la valeur n'a pas été ecrite correctement");
+    } else if(data->order == CM_ORDER_EXIST){
+        ret = write(data->c_to_m, &(data->elt), sizeof(float));
+    	myassert(ret != 0 , "erreur write dans c_to_m aucune donnee ecrite");
+    	myassert(ret == sizeof(float), "erreur la valeur n'a pas été ecrite correctement");
+    } else if(data->order == CM_ORDER_INSERT_MANY){
+        srand((unsigned int)time(NULL));
+
+        //float *tab = malloc(sizeof(float) * data->nb);
+        //for(int i = 0; i<data->nb; i++){
+        //    tab[i] = ((float)rand()/RAND_MAX) * (data->max - data->min) + data->min;
+        //}
+
+        float *tab = ut_generateTab(data->nb, data->min, data->max, 0);
+
+        ret = write(data->c_to_m, &(data->nb), sizeof(int));
+    	myassert(ret != 0 , "erreur write dans c_to_m aucune donnee ecrite");
+    	myassert(ret == sizeof(int), "erreur la valeur n'a pas été ecrite correctement");
+
+        ret = write(data->c_to_m, tab, sizeof(float)*data->nb);
+    	myassert(ret != 0 , "erreur write dans c_to_m aucune donnee ecrite");
+    	myassert(ret == (int)sizeof(float) * data->nb, "erreur la valeur n'a pas été ecrite correctement");
+
+        free(tab);
     }
 
     
@@ -306,9 +338,73 @@ void receiveAnswer(const Data *data)
     //END TODO
     int reponse;
     int ret = read(data->m_to_c, &reponse, sizeof(int));
-    myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
+    myassert(ret != 0 , "erreur read dans m_to_c, personne en écriture");
     myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
-    printf("reponse du master : %d \n", reponse);
+    
+
+    if(reponse == CM_ANSWER_SUM_OK){
+        float elt;
+        ret = read(data->m_to_c, &elt, sizeof(float));
+        myassert(ret != 0 , "erreur read dans m_to_c, personne en écriture");
+        myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+        printf("Somme calculée : %g \n", elt);
+
+    } else if(reponse == CM_ANSWER_STOP_OK){
+        printf("Le master s'arrête\n");
+
+    } else if(reponse == CM_ANSWER_PRINT_OK){
+        printf("L'affichage à été réalisé\n");
+
+    } else if(reponse == CM_ANSWER_INSERT_OK){
+        printf("Insertion réalisée\n");
+
+    } else if(reponse == CM_ANSWER_EXIST_NO){
+        printf("L'élément n'existe pas\n");
+
+    } else if(reponse == CM_ANSWER_EXIST_YES){
+        int number;
+        ret = read(data->m_to_c, &number, sizeof(int));
+        myassert(ret != 0 , "erreur read dans m_to_c, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un float");
+        printf("L'élément {%g} existe %d fois\n", data->elt, number);
+
+    } else if(reponse == CM_ANSWER_MINIMUM_EMPTY){
+        printf("Ensemble vide : inserez un élément d'abord\n");
+
+    } else if(reponse == CM_ANSWER_MINIMUM_OK){
+        float elt;
+        ret = read(data->m_to_c, &elt, sizeof(float));
+        myassert(ret != 0 , "erreur read dans m_to_c, personne en écriture");
+        myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+        printf("Minimum : %g \n", elt);
+
+    } else if(reponse == CM_ANSWER_MAXIMUM_EMPTY){
+        printf("Ensemble vide : inserez un élément d'abord\n");
+
+    } else if(reponse == CM_ANSWER_MAXIMUM_OK){
+        float elt;
+        ret = read(data->m_to_c, &elt, sizeof(float));
+        myassert(ret != 0 , "erreur read dans m_to_c, personne en écriture");
+        myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+        printf("Maximum : %g \n", elt);
+        
+    } else if(reponse == CM_ANSWER_INSERT_MANY_OK){
+        printf("Insertion multiples réalisées\n");
+
+    } else if(reponse == CM_ANSWER_HOW_MANY_OK){
+        int number;
+        int number2;
+
+        ret = read(data->m_to_c, &number, sizeof(int));
+        myassert(ret != 0 , "erreur read dans m_to_c, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un float");
+
+        ret = read(data->m_to_c, &number2, sizeof(int));
+        myassert(ret != 0 , "erreur read dans m_to_c, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un float");
+
+        printf("Nombre total d'éléments : %d\nNombre d'éléments distincts : %d \n", number, number2);
+    }
 }
 
 

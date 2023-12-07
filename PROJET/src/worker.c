@@ -31,6 +31,7 @@ typedef struct
     int pere_to_fils;
     int fils_to_pere;
     int tube_to_master;
+
     bool fils_gauche;
     bool fils_droit;
     // communication avec le fils gauche s'il existe (2 tubes)
@@ -86,7 +87,7 @@ static void parseArgs(int argc, char * argv[], Data *data)
  ************************************************************************/
 void stopAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre stop\n", getpid(), getppid(), data->val /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre stop\n", getpid(), getppid(), data->val );
     myassert(data != NULL, "il faut l'environnement d'exécution");
     int ret;
 
@@ -132,7 +133,7 @@ void stopAction(Data *data)
  ************************************************************************/
 static void howManyAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre how many\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre how many\n", getpid(), getppid(), data->val);
     myassert(data != NULL, "il faut l'environnement d'exécution");
 
     //TODO
@@ -144,6 +145,87 @@ static void howManyAction(Data *data)
     // - envoyer l'accusé de réception au père (cf. master_worker.h)
     // - envoyer les résultats (les cumuls des deux quantités + la valeur locale) au père
     //END TODO
+    int nb = data->nb;
+    int nbdist = 1;
+    int reponse = MW_ANSWER_HOW_MANY;
+    int ret;
+
+    if(data->fils_droit == false && data->fils_gauche == false){
+      
+      ret = write(data->fils_to_pere, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->fils_to_pere, &data->nb, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->fils_to_pere, &nbdist, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    } else {
+      int nb_g = 0;
+      int nbdist_g = 0;
+      int nb_d = 0;
+      int nbdist_d = 0;
+      int order = MW_ORDER_HOW_MANY;
+
+      if(data->fils_gauche == true){
+        ret = write(data->to_fils_gauche[1], &order, sizeof(int));
+        myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+        ret = read(data->from_fils_gauche[0], &reponse, sizeof(int));
+        myassert(ret != 0 , "erreur read dans pere_to_fils, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+        ret = read(data->from_fils_gauche[0], &nb_g, sizeof(int));
+        myassert(ret != 0 , "erreur read dans pere_to_fils, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+        ret = read(data->from_fils_gauche[0], &nbdist_g, sizeof(int));
+        myassert(ret != 0 , "erreur read dans pere_to_fils, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+        
+      }
+
+      
+      if(data->fils_droit == true){
+        ret = write(data->to_fils_droit[1], &order, sizeof(int));
+        myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+        ret = read(data->from_fils_droit[0], &reponse, sizeof(int));
+        myassert(ret != 0 , "erreur read dans pere_to_fils, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+        ret = read(data->from_fils_droit[0], &nb_d, sizeof(int));
+        myassert(ret != 0 , "erreur read dans pere_to_fils, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+        ret = read(data->from_fils_droit[0], &nbdist_d, sizeof(int));
+        myassert(ret != 0 , "erreur read dans pere_to_fils, personne en écriture");
+        myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+      }
+      
+      int newnb = nb + nb_g + nb_d;
+      int new_nb2 = nbdist + nbdist_g + nbdist_d;
+
+      ret = write(data->fils_to_pere, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->fils_to_pere, &newnb, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->fils_to_pere, &new_nb2, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    }
 }
 
 
@@ -152,7 +234,7 @@ static void howManyAction(Data *data)
  ************************************************************************/
 static void minimumAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre minimum\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre minimum\n", getpid(), getppid(), data->val);
     myassert(data != NULL, "il faut l'environnement d'exécution");
 
     //TODO
@@ -163,6 +245,23 @@ static void minimumAction(Data *data)
     //       . envoyer au worker gauche ordre minimum (cf. master_worker.h)
     //       . note : c'est un des descendants qui enverra le résultat au master
     //END TODO
+    int ret; 
+
+    if(data->fils_gauche == false){
+      int reponse = MW_ANSWER_MINIMUM;
+      ret = write(data->tube_to_master, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->tube_to_master, &data->val, sizeof(float));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+    } else {
+      int order = MW_ORDER_MINIMUM;
+      ret = write(data->to_fils_gauche[1], &order, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    }
 }
 
 
@@ -171,12 +270,29 @@ static void minimumAction(Data *data)
  ************************************************************************/
 static void maximumAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre maximum\n", getpid(), getppid(), data->val /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre maximum\n", getpid(), getppid(), data->val );
     myassert(data != NULL, "il faut l'environnement d'exécution");
 
     //TODO
     // cf. explications pour le minimum
     //END TODO
+    int ret; 
+    
+    if(data->fils_droit == false){
+      int reponse = MW_ANSWER_MAXIMUM;
+      ret = write(data->tube_to_master, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->tube_to_master, &data->val, sizeof(float));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+    } else {
+      int order = MW_ORDER_MAXIMUM;
+      ret = write(data->to_fils_droit[1], &order, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+    }
 }
 
 
@@ -185,7 +301,7 @@ static void maximumAction(Data *data)
  ************************************************************************/
 static void existAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre exist\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre exist\n", getpid(), getppid(), data->val);
     myassert(data != NULL, "il faut l'environnement d'exécution");
 
     //TODO
@@ -206,6 +322,53 @@ static void existAction(Data *data)
     //       . envoyer au worker droit élément à tester
     //       . note : c'est un des descendants qui enverra le résultat au master
     //END TODO
+
+    float elt;
+    int ret;
+
+    ret = read(data->pere_to_fils, &elt, sizeof(float));
+    myassert(ret != 0 , "erreur read dans pere_to_fils, personne en écriture");
+    myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+
+    if(elt == data->val){
+      int reponse = MW_ANSWER_EXIST_YES;
+      ret = write(data->tube_to_master, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = write(data->tube_to_master, &data->nb, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    } else if(elt < data->val && data->fils_gauche == false){
+      int reponse = MW_ANSWER_EXIST_NO;
+      ret = write(data->tube_to_master, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    } else if(elt > data->val && data->fils_droit == false){
+      int reponse = MW_ANSWER_EXIST_NO;
+      ret = write(data->tube_to_master, &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+    } else if(elt < data->val){
+      int order = MW_ORDER_EXIST;
+      ret = write(data->to_fils_gauche[1], &order, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+    	ret = write(data->to_fils_gauche[1], &elt, sizeof(float));
+    	myassert(ret == sizeof(float), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+    } else  //sinon (donc elt à insérer > elt courant)
+    {
+       int order = MW_ORDER_EXIST;
+      ret = write(data->to_fils_droit[1], &order, sizeof(int));
+    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
+
+    	ret = write(data->to_fils_droit[1], &elt, sizeof(float));
+    	myassert(ret == sizeof(float), "erreur la valeur envoyée n'est pas de la taille d'un int");
+    }
 }
 
 
@@ -214,7 +377,7 @@ static void existAction(Data *data)
  ************************************************************************/
 static void sumAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre sum\n", getpid(), getppid(), 3.14 /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre sum\n", getpid(), getppid(), data->val);
     myassert(data != NULL, "il faut l'environnement d'exécution");
 
     //TODO
@@ -226,6 +389,52 @@ static void sumAction(Data *data)
     // - envoyer l'accusé de réception au père (cf. master_worker.h)
     // - envoyer le résultat (le cumul des deux quantités + la valeur locale) au père
     //END TODO
+    int order = MW_ORDER_SUM;
+    int ret;
+    float sum_left = 0;
+    float sum_right = 0;
+    float new_sum = 0;
+
+    if(data->fils_droit == true){
+      ret = write(data->to_fils_droit[1], &order, sizeof(int));
+      myassert(ret == sizeof(int), "erreur la valeur ecrite n'est pas de la taille d'un int");
+
+      int reponse;
+      ret = read(data->from_fils_droit[0], &reponse, sizeof(int));
+      myassert(ret != 0 , "erreur read dans from_fils_droit, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = read(data->from_fils_droit[0], &sum_right, sizeof(float));
+      myassert(ret != 0 , "erreur read dans from_fils_droit, personne en écriture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+    }
+
+    if(data->fils_gauche == true){
+      ret = write(data->to_fils_gauche[1], &order, sizeof(int));
+      myassert(ret == sizeof(int), "erreur la valeur ecrite n'est pas de la taille d'un int");
+
+      int reponse2;
+      ret = read(data->from_fils_gauche[0], &reponse2, sizeof(int));
+      myassert(ret != 0 , "erreur read dans from_fils_gauche, personne en écriture");
+      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
+
+      ret = read(data->from_fils_gauche[0], &sum_left, sizeof(float));
+      myassert(ret != 0 , "erreur read dans from_fils_gauche, personne en écriture");
+      myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
+    }
+
+    for(int i =0; i<data->nb; i++){
+      new_sum = new_sum + data->val;
+    }
+    new_sum = new_sum + sum_left + sum_right ;
+    int reponse_pere = MW_ANSWER_SUM;
+
+    ret = write(data->fils_to_pere, &reponse_pere, sizeof(int));
+    myassert(ret == sizeof(int), "erreur la valeur ecrite n'est pas de la taille d'un int");
+
+    ret = write(data->fils_to_pere, &new_sum, sizeof(float));
+    myassert(ret == sizeof(float), "erreur la valeur ecrite n'est pas de la taille d'un int");
+
 }
 
 
@@ -234,7 +443,7 @@ static void sumAction(Data *data)
  ************************************************************************/
 static void insertAction(Data *data)
 {
-    TRACE3("    [worker (%d, %d) {%g}] : ordre insert\n", getpid(), getppid(), data->val /*TODO élément*/);
+    TRACE3("    [worker (%d, %d) {%g}] : ordre insert\n", getpid(), getppid(), data->val);
     myassert(data != NULL, "il faut l'environnement d'exécution");
 
     //TODO
@@ -264,7 +473,7 @@ static void insertAction(Data *data)
     int retfork;
     ret = read(data->pere_to_fils, &elt, sizeof(float));
     myassert(ret != 0 , "erreur read dans pere_to_fils, personne en écriture");
-    myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un int");
+    myassert(ret == sizeof(float), "erreur la valeur lue n'est pas de la taille d'un float");
 
     if(elt == data->val) //élément courant == élément à tester
     {
@@ -313,24 +522,10 @@ static void insertAction(Data *data)
     	  argv[4] = new_c_allw;
     	  argv[5] = NULL;
 
-        ret = close(data->to_fils_ga
-    if(data->exist_worker == true)
-    {
-      int order = MW_ORDER_PRINT;
-    	ret = write(data->c_to_w[1], &order, sizeof(int));
-    	myassert(ret == sizeof(int), "erreur la valeur envoyée n'est pas de la taille d'un int");
-
-      int reponse;
-      ret = read(data->c_from_w[0], &reponse, sizeof(int));
-      myassert(ret != 0 , "erreur read dans c_from_w, personne en écriture");
-      myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int");
-    }
-    
-    int reponse_pere = CM_ANSWER_PRINT_OK;
-    ret = write(data->m_to_c, &reponse_pere, sizeof(int));
-    myassert(ret != 0 , "erreur read dans COM_TO_CLIENT, personne en écriture");
-    myassert(ret == sizeof(int), "erreur la valeur lue n'est pas de la taille d'un int")gauche[0]);
-        myassert(ret == 0, "erreur le tube from_fils_gauche[0] n'est pas fermé");        
+        ret = close(data->to_fils_gauche[1]);
+        myassert(ret == 0, "erreur le tube to_fils_gauche[1] n'est pas fermé");    
+        ret = close(data->from_fils_gauche[0]);  
+        myassert(ret == 0, "erreur le tube from_fils_gauche[0] n'est pas fermé");
         
     	  execv(argv[0], argv);
       }
@@ -391,8 +586,7 @@ static void insertAction(Data *data)
         myassert(ret == 0, "erreur le tube from_fils_droit[0] n'est pas fermé");
       }
 
-    }
-    if(elt < data->val) //si (elt à insérer < elt courant)
+    } else if(elt < data->val) //si (elt à insérer < elt courant)
     {
       int order = MW_ORDER_INSERT;
       ret = write(data->to_fils_gauche[1], &order, sizeof(int));
