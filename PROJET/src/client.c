@@ -219,6 +219,9 @@ typedef struct
 {
     int *result;
     int nbtosearch;
+    int scale;
+    int start;
+    float * tab;
     pthread_mutex_t *mutex;
 } ThreadData;
 //TODO
@@ -229,20 +232,67 @@ typedef struct
 // Le compteur partagé est la variable "result" de "lauchThreads".
 // A vous de voir les paramètres nécessaires  (aucune variable globale autorisée)
 //END TODO
+void * codeThread(void * arg)
+{
+    ThreadData *dataThread = (ThreadData *) arg;
+    int num = 0;
+    int ret;
+
+    for (int i = dataThread->start; i < dataThread->start + dataThread->scale; i++){
+        if(dataThread->tab[i] == dataThread->nbtosearch ){
+            num ++;
+        }
+    }
+
+    ret = pthread_mutex_lock(dataThread->mutex);
+    myassert(ret == 0, "l'entrée en section critique à échoué");
+    (*(dataThread->result)) += num;
+    ret = pthread_mutex_unlock(dataThread->mutex);
+    myassert(ret == 0, "la sortie de la section critique a échoué");
+    
+    return NULL;
+}
 
 void lauchThreads(const Data *data)
 {
     //TODO déclarations nécessaires : mutex, ...
     int result = 0;
-    float * tab = ut_generateTab(data->nb, data->min, data->max, 0);
+    float * tabalea = ut_generateTab(data->nb, data->min, data->max, 0);
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_t tabId[data->nbThreads];
-    ThreadData datas[data->nbThreads];
+    ThreadData mydata[data->nbThreads];
+    
+    int lentab = data->nb;
+
+    for(int i =0; i< data->nbThreads; i++){
+        if(i < (data->nbThreads )-1){
+            mydata[i].result = &result;
+            mydata[i].nbtosearch = data->elt;
+            mydata[i].scale =  lentab/data->nbThreads;
+            mydata[i].start = i * (lentab/data->nbThreads);
+            mydata[i].tab= tabalea;
+            mydata[i].mutex = &mutex;
+        } else {
+            mydata[i].result = &result;
+            mydata[i].nbtosearch = data->elt;
+            mydata[i].start = i * (lentab/data->nbThreads);
+            mydata[i].scale = lentab - (i * (lentab/data->nbThreads));
+            mydata[i].tab= tabalea;
+            mydata[i].mutex = &mutex;
+        }
+        
+    }
 
     //TODO lancement des threads
-
+    for(int i = 0; i < data->nbThreads; i++){
+        int ret = pthread_create(&(tabId[i]), NULL, codeThread, &(mydata[i]));
+        myassert(ret == 0, "erreur le thread ne s'est pas lancé correctement");
+    }
     //TODO attente de la fin des threads
-
+    for(int i =0; i <data->nbThreads; i++){
+        int ret = pthread_join(tabId[i], NULL);
+        myassert(ret == 0, "erreur, le thread n'a pas été attendu");
+    }
     // résultat (result a été rempli par les threads)
     // affichage du tableau si pas trop gros
     if (data->nb <= 20)
@@ -252,7 +302,7 @@ void lauchThreads(const Data *data)
         {
             if (i != 0)
                 printf(" ");
-            printf("%g", tab[i]);
+            printf("%g", tabalea[i]);
         }
         printf("]\n");
     }
@@ -260,7 +310,7 @@ void lauchThreads(const Data *data)
     int nbVerif = 0;
     for (int i = 0; i < data->nb; i++)
     {
-        if (tab[i] == data->elt)
+        if (tabalea[i] == data->elt)
             nbVerif ++;
     }
     printf("Elément %g présent %d fois (%d attendu)\n", data->elt, result, nbVerif);
@@ -270,6 +320,8 @@ void lauchThreads(const Data *data)
         printf("=> PB ! le résultat calculé par les threads est incorrect\n");
 
     //TODO libération des ressources    
+    int ret = pthread_mutex_destroy(&mutex);
+    myassert(ret == 0, "erreur, le thread n'a pas été supprimé");
 }
 
 
@@ -415,12 +467,7 @@ int main(int argc, char * argv[])
 {
     Data data;
     
-    int ret;
-    init(&data);
-
-    struct sembuf prendre = {0, -1, 0};
-    ret = semop(data.sem_order, &prendre, 1);
-    myassert(ret != -1, "erreur le client n'est pas entré en section critique");  
+    int ret;    
     
     parseArgs(argc, argv, &data);
 
@@ -437,9 +484,12 @@ int main(int argc, char * argv[])
         //         le master ouvre les tubes dans le même ordre
         //END TODO
         //création des sémaphores
-    	
-        
-    	
+    	init(&data);
+
+        struct sembuf prendre = {0, -1, 0};
+        ret = semop(data.sem_order, &prendre, 1);
+        myassert(ret != -1, "erreur le client n'est pas entré en section critique");  
+
     	      
     	
     	//ouverture des tubes
