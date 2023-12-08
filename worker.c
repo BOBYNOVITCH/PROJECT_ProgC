@@ -1,3 +1,6 @@
+//Arnaud BONNET
+//Antoine PROMIS
+
 #if defined HAVE_CONFIG_H
 #include "config.h"
 #endif
